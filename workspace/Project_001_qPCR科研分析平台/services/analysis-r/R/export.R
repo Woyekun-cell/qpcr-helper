@@ -102,6 +102,7 @@ create_research_export <- function(
   palette_name = "nature-muted",
   p_label_mode = "stars",
   show_points = TRUE,
+  custom_colors = NULL,
   locale = "en"
 ) {
   required_packages <- c("jsonlite", "openxlsx", "zip")
@@ -187,7 +188,8 @@ create_research_export <- function(
     contrasts = analysis$contrasts,
     palette_name = palette_name,
     p_label_mode = p_label_mode,
-    show_points = show_points
+    show_points = show_points,
+    custom_colors = custom_colors
   )
   save_publication_figure(
     plot,
@@ -221,6 +223,7 @@ create_research_export <- function(
       palette = palette_name,
       pLabelMode = p_label_mode,
       showPoints = show_points,
+      customColors = custom_colors,
       backend = "R"
     )
   )
@@ -244,12 +247,13 @@ create_research_export <- function(
     "source(\"figure_functions.R\")",
     "samples <- read.csv(\"clean_samples.csv\", stringsAsFactors = FALSE)",
     sprintf(
-      "plot <- build_expression_plot(samples, plot_type = \"%s\", confidence_level = %s, contrasts = read.csv(\"contrasts.csv\", stringsAsFactors = FALSE), palette_name = \"%s\", p_label_mode = \"%s\", show_points = %s)",
+      "plot <- build_expression_plot(samples, plot_type = \"%s\", confidence_level = %s, contrasts = read.csv(\"contrasts.csv\", stringsAsFactors = FALSE), palette_name = \"%s\", p_label_mode = \"%s\", show_points = %s, custom_colors = %s)",
       plot_type,
       confidence_level,
       palette_name,
       p_label_mode,
-      if (show_points) "TRUE" else "FALSE"
+      if (show_points) "TRUE" else "FALSE",
+      if (is.null(custom_colors)) "NULL" else sprintf("c(%s)", paste(sprintf("\"%s\"", custom_colors), collapse = ", "))
     ),
     sprintf(
       "save_publication_figure(plot, \"figure-reproduced\", width_mm = %s, height_mm = %s, dpi = %s)",

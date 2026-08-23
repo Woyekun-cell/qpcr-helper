@@ -2,7 +2,7 @@ import { analysisRequestSchema, prepareAnalysis } from "@/lib/analysis-request";
 import { guestJobRepository } from "@/lib/guest-repository";
 import { persistAuthenticatedResult } from "@/lib/persistence";
 import { allowRequest } from "@/lib/rate-limit";
-import { hashCanonicalJson } from "@/lib/request-hash";
+import { hashAnalysisSource } from "@/lib/request-hash";
 import { runRAnalysis } from "@/lib/r-client";
 import { NextResponse } from "next/server";
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         headers: { "Cache-Control": "no-store" }
       });
     }
-    const guest = await guestJobRepository.create({ inputHash: hashCanonicalJson(input), result });
+    const guest = await guestJobRepository.create({ inputHash: hashAnalysisSource(input), result });
     return NextResponse.json({ ...guest, status: "succeeded", result }, {
       headers: { "Cache-Control": "no-store" }
     });

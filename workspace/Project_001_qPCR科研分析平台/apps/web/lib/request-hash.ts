@@ -18,3 +18,10 @@ function canonicalize(value: unknown): unknown {
 export function hashCanonicalJson(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(canonicalize(value))).digest("hex");
 }
+
+export function hashAnalysisSource(value: unknown): string {
+  if (!value || typeof value !== "object") return hashCanonicalJson(value);
+  const source = { ...(value as Record<string, unknown>) };
+  delete source.figure;
+  return hashCanonicalJson(source);
+}

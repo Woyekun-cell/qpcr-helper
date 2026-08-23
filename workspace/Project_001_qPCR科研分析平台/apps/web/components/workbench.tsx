@@ -48,7 +48,13 @@ import { ProjectLibrary, type CloudProject } from "./project-library";
 
 type Locale = "zh-CN" | "en";
 type FigureType = "bar" | "dot" | "box" | "violin" | "paired" | "time" | "heatmap";
-type FigurePalette = "nature-muted" | "prism" | "okabe-ito" | "tol-bright" | "cool" | "warm";
+type FigurePalette =
+  | "nature-muted" | "nature-earth" | "cell-bright" | "cell-soft" | "prism"
+  | "okabe-ito" | "tol-bright" | "morandi-sage" | "morandi-dust" | "morandi-blue" | "morandi-earth"
+  | "macaron-pastel" | "macaron-candy" | "macaron-gelato"
+  | "gradient-blue-red" | "gradient-purple-green" | "gradient-teal-coral" | "gradient-sunset" | "gradient-ocean"
+  | "cool" | "warm" | "custom";
+type PaletteCategory = "journal" | "morandi" | "macaron" | "accessible" | "gradient" | "custom";
 type PLabelMode = "stars" | "exact" | "stars-exact" | "none";
 interface JobReference { id: string; token?: string; expiresAt?: number; exportRequest?: AnalysisRequest }
 
@@ -79,7 +85,7 @@ const copy = {
     run: "运行 R 分析",
     running: "正在分析…",
     resultTitle: "表达量与统计推断",
-    figureTitle: "R / ggplot2 科研图",
+    figureTitle: "R 投稿级科研图",
     exportTitle: "完整科研包",
     export: "下载 ZIP 科研包",
     empty: "载入演示或导入 Ct 数据后开始。",
@@ -113,7 +119,7 @@ const copy = {
     run: "Run R analysis",
     running: "Analyzing…",
     resultTitle: "Expression and statistical inference",
-    figureTitle: "R / ggplot2 research figure",
+    figureTitle: "R publication figure",
     exportTitle: "Complete research package",
     export: "Download research ZIP",
     empty: "Load the demo or import Ct values to begin.",
@@ -163,13 +169,41 @@ function percentLabel(value: number | undefined): string {
   return `${Math.round((value ?? 0.95) * 100)}%`;
 }
 
-const paletteOptions: Array<{ value: FigurePalette; label: string; colors: string[] }> = [
-  { value: "nature-muted", label: "Nature muted", colors: ["#4F6B45", "#D98268", "#4C6F91"] },
-  { value: "prism", label: "Prism classic", colors: ["#3B75AF", "#E06B65", "#59A14F"] },
-  { value: "okabe-ito", label: "Okabe–Ito", colors: ["#0072B2", "#D55E00", "#009E73"] },
-  { value: "tol-bright", label: "Tol bright", colors: ["#4477AA", "#EE6677", "#228833"] },
-  { value: "cool", label: "Cool", colors: ["#2F5D8A", "#5A8BB5", "#63A7A3"] },
-  { value: "warm", label: "Warm", colors: ["#8C4A32", "#C96B4B", "#D99A4E"] }
+const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; en: string }; options: Array<{ value: FigurePalette; label: string; colors: string[] }> }> = [
+  { value: "journal", label: { "zh-CN": "期刊风格", en: "Journal" }, options: [
+    { value: "nature-muted", label: "Nature muted", colors: ["#4F6B45", "#D98268", "#4C6F91"] },
+    { value: "nature-earth", label: "Nature earth", colors: ["#496A4B", "#B7654F", "#4E6F8E"] },
+    { value: "cell-bright", label: "Cell bright", colors: ["#3B82B5", "#E0764C", "#50A56C"] },
+    { value: "cell-soft", label: "Cell soft", colors: ["#5B7FA3", "#C9826A", "#719477"] },
+    { value: "prism", label: "Prism classic", colors: ["#3B75AF", "#E06B65", "#59A14F"] }
+  ] },
+  { value: "morandi", label: { "zh-CN": "莫兰迪", en: "Morandi" }, options: [
+    { value: "morandi-sage", label: "Sage", colors: ["#7E8B76", "#B8897D", "#8091A0"] },
+    { value: "morandi-dust", label: "Dust", colors: ["#9C7F7B", "#B59A8B", "#7D8C91"] },
+    { value: "morandi-blue", label: "Blue grey", colors: ["#667C8A", "#8EA0AA", "#9A7E79"] },
+    { value: "morandi-earth", label: "Earth", colors: ["#897568", "#A98576", "#6F8179"] }
+  ] },
+  { value: "macaron", label: { "zh-CN": "马卡龙", en: "Macaron" }, options: [
+    { value: "macaron-pastel", label: "Pastel", colors: ["#8EC5E8", "#F3A6A0", "#9ED9B5"] },
+    { value: "macaron-candy", label: "Candy", colors: ["#69B7EB", "#FF8F86", "#76D39B"] },
+    { value: "macaron-gelato", label: "Gelato", colors: ["#A7C7E7", "#F4B6A8", "#B7D7B0"] }
+  ] },
+  { value: "accessible", label: { "zh-CN": "通用安全", en: "Accessible" }, options: [
+    { value: "okabe-ito", label: "Okabe–Ito", colors: ["#0072B2", "#D55E00", "#009E73"] },
+    { value: "tol-bright", label: "Tol bright", colors: ["#4477AA", "#EE6677", "#228833"] },
+    { value: "cool", label: "Cool", colors: ["#2F5D8A", "#5A8BB5", "#63A7A3"] },
+    { value: "warm", label: "Warm", colors: ["#8C4A32", "#C96B4B", "#D99A4E"] }
+  ] },
+  { value: "gradient", label: { "zh-CN": "渐变", en: "Gradient" }, options: [
+    { value: "gradient-blue-red", label: "Blue–red", colors: ["#315B8A", "#F6F3EE", "#B64F4A"] },
+    { value: "gradient-purple-green", label: "Purple–green", colors: ["#6B4C8A", "#F5F3ED", "#4D8B72"] },
+    { value: "gradient-teal-coral", label: "Teal–coral", colors: ["#287D7B", "#F7F3EC", "#D66B5D"] },
+    { value: "gradient-sunset", label: "Sunset", colors: ["#574B90", "#F6C98B", "#C84A5A"] },
+    { value: "gradient-ocean", label: "Ocean", colors: ["#173F5F", "#63B7AF", "#E6F4F1"] }
+  ] },
+  { value: "custom", label: { "zh-CN": "自定义", en: "Custom" }, options: [
+    { value: "custom", label: "Custom", colors: ["#496A4B", "#D98268", "#4C6F91", "#D6A43B"] }
+  ] }
 ];
 
 function recommendedFigureType(experiment: ExperimentInput): FigureType {
@@ -250,15 +284,21 @@ export function Workbench() {
   const [config, setConfig] = useState<AnalysisConfig | null>(null);
   const [figureType, setFigureType] = useState<FigureType>("bar");
   const [figurePalette, setFigurePalette] = useState<FigurePalette>("nature-muted");
+  const [paletteCategory, setPaletteCategory] = useState<PaletteCategory>("journal");
+  const [customColors, setCustomColors] = useState(["#496A4B", "#D98268", "#4C6F91", "#D6A43B"]);
   const [pLabelMode, setPLabelMode] = useState<PLabelMode>("stars");
   const [showPoints, setShowPoints] = useState(true);
-  const [figureWidth, setFigureWidth] = useState<90 | 180>(90);
+  const [figureWidth, setFigureWidth] = useState<90 | 120 | 150 | 180>(90);
+  const [figureHeight, setFigureHeight] = useState<60 | 70 | 75 | 90 | 105 | 120>(70);
   const [figureDpi, setFigureDpi] = useState<300 | 600>(300);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState("");
   const [qcDecisions, setQcDecisions] = useState<QcDecision[]>([]);
   const [paste, setPaste] = useState(starterText);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<PlatformAnalysisResult | null>(null);
+  const [figurePreview, setFigurePreview] = useState<PlatformAnalysisResult["figure"] | null>(null);
   const [job, setJob] = useState<JobReference | null>(null);
   const [showAccount, setShowAccount] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -272,6 +312,17 @@ export function Workbench() {
     try { return analyzeDeltaDeltaCt(experiment); } catch { return null; }
   }, [experiment]);
 
+  const activeFigureConfig = useMemo(() => ({
+    plotType: figureType,
+    widthMm: figureWidth,
+    heightMm: figureHeight,
+    dpi: figureDpi,
+    palette: figurePalette,
+    pLabelMode,
+    showPoints,
+    ...(figurePalette === "custom" ? { customColors } : {})
+  }), [customColors, figureDpi, figureHeight, figurePalette, figureType, figureWidth, pLabelMode, showPoints]);
+
   useEffect(() => {
     const client = createSupabaseBrowserClient();
     if (!client) return;
@@ -282,6 +333,44 @@ export function Workbench() {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (step !== 5 || !result || !config) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setPreviewing(true);
+      setPreviewError("");
+      try {
+        const response = await fetch("/api/figure-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            samples: result.calculation.samples,
+            config: { calibratorGroup: config.calibratorGroup, confidenceLevel: config.confidenceLevel },
+            figure: activeFigureConfig,
+            analysis: result.statistics,
+            title: null
+          }),
+          signal: controller.signal
+        });
+        const preview = await response.json();
+        if (!response.ok) throw new Error(preview.message ?? "Figure preview failed");
+        setFigurePreview(preview as PlatformAnalysisResult["figure"]);
+        setJob((current) => current?.exportRequest
+          ? { ...current, exportRequest: { ...current.exportRequest, figure: activeFigureConfig } }
+          : current);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setPreviewError(error instanceof Error ? error.message : "Figure preview failed");
+      } finally {
+        if (!controller.signal.aborted) setPreviewing(false);
+      }
+    }, 450);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [activeFigureConfig, config, result, step]);
+
   function loadExample(exampleId: ExampleId) {
     const demo = createExampleExperiment(exampleId, locale);
     const example = exampleCatalog.find((item) => item.id === exampleId);
@@ -289,6 +378,7 @@ export function Workbench() {
     setConfig(defaultAnalysisConfig(demo));
     setFigureType(example?.figureType ?? "bar");
     setResult(null);
+    setFigurePreview(null);
     setJob(null);
     setQcDecisions([]);
     setMessage("");
@@ -300,6 +390,7 @@ export function Workbench() {
     setConfig(defaultAnalysisConfig(demo));
     setFigureType("bar");
     setResult(null);
+    setFigurePreview(null);
     setJob(null);
     setQcDecisions([]);
     setMessage("");
@@ -318,6 +409,7 @@ export function Workbench() {
     setFigureType(recommendedFigureType(next));
     setQcDecisions(decisions);
     setResult(null);
+    setFigurePreview(null);
     setJob(null);
     setMessage(`${wells.length} ${t.wells}`);
   }
@@ -368,6 +460,7 @@ export function Workbench() {
       decidedAt: new Date().toISOString()
     }]);
     setResult(null);
+    setFigurePreview(null);
     setJob(null);
   }
 
@@ -377,7 +470,7 @@ export function Workbench() {
       id: experiment.projectId,
       name: experiment.name,
       updatedAt: Date.now(),
-      payload: { experiment, config, figureType, figurePalette, pLabelMode, showPoints, figureWidth, figureDpi, qcDecisions }
+      payload: { experiment, config, figureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, figureWidth, figureHeight, figureDpi, qcDecisions }
     });
     setMessage(locale === "zh-CN" ? "已保存到本浏览器。" : "Saved in this browser.");
   }
@@ -400,7 +493,7 @@ export function Workbench() {
   }
 
   function applyStoredProject(payload: unknown) {
-    const stored = payload as { experiment?: unknown; config?: unknown; figureType?: unknown; figurePalette?: unknown; pLabelMode?: unknown; showPoints?: unknown; figureWidth?: unknown; figureDpi?: unknown; qcDecisions?: unknown; result?: unknown };
+    const stored = payload as { experiment?: unknown; config?: unknown; figureType?: unknown; figurePalette?: unknown; paletteCategory?: unknown; customColors?: unknown; pLabelMode?: unknown; showPoints?: unknown; figureWidth?: unknown; figureHeight?: unknown; figureDpi?: unknown; qcDecisions?: unknown; result?: unknown };
     const parsedExperiment = experimentInputSchema.safeParse(stored.experiment);
     const parsedConfig = analysisConfigSchema.safeParse(stored.config);
     const parsedDecisions = qcDecisionSchema.array().safeParse(stored.qcDecisions ?? []);
@@ -413,12 +506,16 @@ export function Workbench() {
     if (["bar", "dot", "box", "violin", "paired", "time", "heatmap"].includes(String(stored.figureType))) {
       setFigureType(stored.figureType as FigureType);
     }
-    if (["nature-muted", "prism", "okabe-ito", "tol-bright", "cool", "warm"].includes(String(stored.figurePalette))) setFigurePalette(stored.figurePalette as FigurePalette);
+    if (paletteGroups.flatMap((group) => group.options.map((item) => item.value)).includes(stored.figurePalette as FigurePalette)) setFigurePalette(stored.figurePalette as FigurePalette);
+    if (paletteGroups.some((group) => group.value === stored.paletteCategory)) setPaletteCategory(stored.paletteCategory as PaletteCategory);
+    if (Array.isArray(stored.customColors) && stored.customColors.length >= 2 && stored.customColors.every((color) => /^#[0-9A-Fa-f]{6}$/.test(String(color)))) setCustomColors(stored.customColors.map(String));
     if (["stars", "exact", "stars-exact", "none"].includes(String(stored.pLabelMode))) setPLabelMode(stored.pLabelMode as PLabelMode);
     if (typeof stored.showPoints === "boolean") setShowPoints(stored.showPoints);
-    if (stored.figureWidth === 90 || stored.figureWidth === 180) setFigureWidth(stored.figureWidth);
+    if ([90, 120, 150, 180].includes(Number(stored.figureWidth))) setFigureWidth(stored.figureWidth as 90 | 120 | 150 | 180);
+    if ([60, 70, 75, 90, 105, 120].includes(Number(stored.figureHeight))) setFigureHeight(stored.figureHeight as 60 | 70 | 75 | 90 | 105 | 120);
     if (stored.figureDpi === 300 || stored.figureDpi === 600) setFigureDpi(stored.figureDpi);
     setResult(stored.result && typeof stored.result === "object" ? stored.result as PlatformAnalysisResult : null);
+    setFigurePreview(null);
     setJob(null);
     setQcDecisions(parsedDecisions.data);
     setStep(0);
@@ -476,7 +573,7 @@ export function Workbench() {
       const analysisRequest: AnalysisRequest = {
         experiment: activeExperiment,
         config: activeConfig,
-        figure: { plotType: activeFigureType, widthMm: figureWidth, heightMm: figureWidth === 180 ? 105 : 70, dpi: figureDpi, palette: figurePalette, pLabelMode, showPoints },
+        figure: { ...activeFigureConfig, plotType: activeFigureType },
         qcDecisions
       };
       const response = await fetch("/api/analysis-jobs", {
@@ -488,15 +585,17 @@ export function Workbench() {
       if (!response.ok) throw new Error(payload.message ?? payload.error ?? "Analysis failed");
       const completedResult = payload.result as PlatformAnalysisResult;
       setResult(completedResult);
+      setFigurePreview(null);
       setJob({
         id: payload.id,
-        ...(payload.token ? { token: payload.token, exportRequest: analysisRequest } : {}),
+        exportRequest: analysisRequest,
+        ...(payload.token ? { token: payload.token } : {}),
         ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {})
       });
       await guestProjects.appendVersion({
         id: activeExperiment.projectId,
         name: activeExperiment.name,
-        payload: { experiment: activeExperiment, config: activeConfig, figureType: activeFigureType, figurePalette, pLabelMode, showPoints, figureWidth, figureDpi, qcDecisions, result: completedResult }
+        payload: { experiment: activeExperiment, config: activeConfig, figureType: activeFigureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, figureWidth, figureHeight, figureDpi, qcDecisions, result: completedResult }
       });
       setStep(destinationStep);
     } catch (error) {
@@ -568,10 +667,11 @@ export function Workbench() {
     try {
       const response = await fetch(`/api/analysis-jobs/${job.id}/exports`, {
         method: "POST",
-        headers: job.token
-          ? { "x-capability-token": job.token, "Content-Type": "application/json" }
-          : {},
-        ...(job.token && job.exportRequest ? { body: JSON.stringify(job.exportRequest) } : {})
+        headers: {
+          "Content-Type": "application/json",
+          ...(job.token ? { "x-capability-token": job.token } : {})
+        },
+        ...(job.exportRequest ? { body: JSON.stringify(job.exportRequest) } : {})
       });
       if (!response.ok) throw new Error((await response.json()).message ?? "Export failed");
       const url = URL.createObjectURL(await response.blob());
@@ -590,7 +690,8 @@ export function Workbench() {
   const omnibusRows = collectOmnibusRows(result);
   const fittedMethod = result ? Object.values(result.statistics.analyses)[0]?.method : undefined;
   const diagnostic = result ? Object.values(result.statistics.analyses)[0]?.diagnostics : undefined;
-  const svg = result?.figure?.svg as string | undefined;
+  const displayedFigure = figurePreview ?? result?.figure;
+  const svg = displayedFigure?.svg as string | undefined;
   const svgUrl = svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : "";
   const adjustedPValues = contrasts.map((item) => item.p_adjusted_family ?? item.p_adjusted).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   const availableFigureTypes: Array<{ value: FigureType; label: string }> = [
@@ -686,19 +787,19 @@ export function Workbench() {
           </section>}
 
           {step === 5 && <section className="panel figure-panel">
-            <div className="section-intro"><span className="section-number">06</span><div><h2>{t.figureTitle}</h2><p>{figureWidth} mm · Helvetica · 6.5 pt · {percentLabel(config?.confidenceLevel)} CI · editable SVG/PDF</p></div></div>
+            <div className="section-intro"><span className="section-number">06</span><div><h2>{t.figureTitle}</h2><p>{figureWidth} × {figureHeight} mm · Helvetica · 6.5 pt · {percentLabel(config?.confidenceLevel)} CI · editable SVG/PDF</p></div></div>
             <div className="figure-studio">
               <div className="figure-stage">
-                {svgUrl ? <div className="figure-canvas"><Image src={svgUrl} width={900} height={620} unoptimized alt={locale === "zh-CN" ? "R 生成的相对表达量图" : "R-generated relative expression plot"} /></div> : <EmptyState text={locale === "zh-CN" ? "输入 Ct 后点击一键分析出图。" : "Enter Ct values, then analyze and plot."} onDemo={() => runAnalysis(undefined, undefined, 5)} label={t.run} />}
-                <div className="figure-meta"><span>{result?.figure.backend ?? "R"}</span><span>{figureWidth} × {figureWidth === 180 ? 105 : 70} mm</span><span>{figureDpi} dpi raster</span></div>
+                {svgUrl ? <div className={`figure-canvas ${previewing ? "updating" : ""}`}><Image src={svgUrl} width={900} height={620} unoptimized alt={locale === "zh-CN" ? "R 生成的相对表达量图" : "R-generated relative expression plot"} />{previewing && <span className="preview-status">{locale === "zh-CN" ? "实时更新…" : "Updating…"}</span>}</div> : <EmptyState text={locale === "zh-CN" ? "输入 Ct 后点击一键分析出图。" : "Enter Ct values, then analyze and plot."} onDemo={() => runAnalysis(undefined, undefined, 5)} label={t.run} />}
+                <div className="figure-meta"><span>{displayedFigure?.backend ?? "R"}</span><span>{figureWidth} × {figureHeight} mm</span><span>{figureDpi} dpi raster</span><span>{locale === "zh-CN" ? "设置自动生效" : "Live preview"}</span></div>
+                {previewError && <p className="preview-error">{previewError}</p>}
               </div>
               <aside className="figure-inspector">
-                <div className="inspector-heading"><Palette size={16} /><div><strong>{locale === "zh-CN" ? "图形设置" : "Figure settings"}</strong><span>{locale === "zh-CN" ? "修改后生成新版本" : "Changes create a new version"}</span></div></div>
+                <div className="inspector-heading"><Palette size={16} /><div><strong>{locale === "zh-CN" ? "图形设置" : "Figure settings"}</strong><span>{locale === "zh-CN" ? "修改后自动实时重绘" : "Changes redraw automatically"}</span></div></div>
                 <fieldset><legend>{locale === "zh-CN" ? "图形类型" : "Plot type"}</legend><div className="plot-tabs">{availableFigureTypes.map((item) => <button key={item.value} className={figureType === item.value ? "selected" : ""} onClick={() => setFigureType(item.value)}>{item.label}</button>)}</div></fieldset>
-                <fieldset><legend>{locale === "zh-CN" ? "配色" : "Palette"}</legend><div className="palette-grid">{paletteOptions.map((item) => <button key={item.value} title={item.label} aria-label={item.label} className={figurePalette === item.value ? "selected" : ""} onClick={() => setFigurePalette(item.value)}><span>{item.colors.map((color) => <i key={color} style={{ background: color }} />)}</span><small>{item.label}</small></button>)}</div></fieldset>
-                <div className="inspector-grid"><label><span>{locale === "zh-CN" ? "显著性标注" : "P-value label"}</span><select value={pLabelMode} onChange={(event) => setPLabelMode(event.target.value as PLabelMode)}><option value="stars">* / ** / ***</option><option value="stars-exact">Stars + exact p</option><option value="exact">Exact adjusted p</option><option value="none">None</option></select></label><label><span>{locale === "zh-CN" ? "投稿宽度" : "Width"}</span><select value={figureWidth} onChange={(event) => setFigureWidth(Number(event.target.value) as 90 | 180)}><option value="90">90 mm</option><option value="180">180 mm</option></select></label><label><span>{locale === "zh-CN" ? "位图分辨率" : "Raster DPI"}</span><select value={figureDpi} onChange={(event) => setFigureDpi(Number(event.target.value) as 300 | 600)}><option value="300">300 dpi</option><option value="600">600 dpi</option></select></label><label className="check-control"><input type="checkbox" checked={showPoints} onChange={(event) => setShowPoints(event.target.checked)} /><span>{locale === "zh-CN" ? "显示独立样本点" : "Show individual points"}</span></label></div>
+                <fieldset><legend>{locale === "zh-CN" ? "配色分类" : "Palette category"}</legend><div className="palette-categories">{paletteGroups.map((group) => <button key={group.value} className={paletteCategory === group.value ? "selected" : ""} onClick={() => setPaletteCategory(group.value)}>{group.label[locale]}</button>)}</div><div className="palette-grid">{paletteGroups.find((group) => group.value === paletteCategory)?.options.map((item) => <button key={item.value} title={item.label} aria-label={item.label} className={figurePalette === item.value ? "selected" : ""} onClick={() => setFigurePalette(item.value)}><span>{(item.value === "custom" ? customColors : item.colors).map((color) => <i key={color} style={{ background: color }} />)}</span><small>{item.label}</small></button>)}</div>{paletteCategory === "custom" && <><div className="custom-colors">{customColors.map((color, index) => <label key={`${index}-${color}`}><span>{locale === "zh-CN" ? `颜色 ${index + 1}` : `Color ${index + 1}`}</span><input type="color" value={color} onChange={(event) => setCustomColors((colors) => colors.map((item, itemIndex) => itemIndex === index ? event.target.value.toUpperCase() : item))} /></label>)}</div><div className="custom-color-actions"><button disabled={customColors.length >= 8} onClick={() => setCustomColors((colors) => [...colors, "#7A8FA6"])}>{locale === "zh-CN" ? "+ 添加颜色" : "+ Add color"}</button><button disabled={customColors.length <= 2} onClick={() => setCustomColors((colors) => colors.slice(0, -1))}>{locale === "zh-CN" ? "− 减少颜色" : "− Remove"}</button></div></>}</fieldset>
+                <div className="inspector-grid"><label><span>{locale === "zh-CN" ? "显著性标注" : "P-value label"}</span><select value={pLabelMode} onChange={(event) => setPLabelMode(event.target.value as PLabelMode)}><option value="stars">* / ** / ***</option><option value="stars-exact">Stars + exact p</option><option value="exact">Exact adjusted p</option><option value="none">None</option></select></label><label><span>{locale === "zh-CN" ? "投稿宽度" : "Width"}</span><select value={figureWidth} onChange={(event) => setFigureWidth(Number(event.target.value) as 90 | 120 | 150 | 180)}><option value="90">90 mm</option><option value="120">120 mm</option><option value="150">150 mm</option><option value="180">180 mm</option></select></label><label><span>{locale === "zh-CN" ? "投稿高度" : "Height"}</span><select value={figureHeight} onChange={(event) => setFigureHeight(Number(event.target.value) as 60 | 70 | 75 | 90 | 105 | 120)}><option value="60">60 mm</option><option value="70">70 mm</option><option value="75">75 mm</option><option value="90">90 mm</option><option value="105">105 mm</option><option value="120">120 mm</option></select></label><label><span>{locale === "zh-CN" ? "位图分辨率" : "Raster DPI"}</span><select value={figureDpi} onChange={(event) => setFigureDpi(Number(event.target.value) as 300 | 600)}><option value="300">300 dpi</option><option value="600">600 dpi</option></select></label><label className="check-control"><input type="checkbox" checked={showPoints} onChange={(event) => setShowPoints(event.target.checked)} /><span>{locale === "zh-CN" ? "显示独立样本点" : "Show individual points"}</span></label></div>
                 <div className="star-key"><span>ns</span><span>* &lt; 0.05</span><span>** &lt; 0.01</span><span>*** &lt; 0.001</span><span>**** &lt; 0.0001</span></div>
-                <button className="primary-button generate-figure" onClick={() => void runAnalysis(undefined, undefined, 5)} disabled={busy || !experiment}>{busy ? t.running : locale === "zh-CN" ? "生成投稿图" : "Generate figure"}</button>
               </aside>
             </div>
           </section>}

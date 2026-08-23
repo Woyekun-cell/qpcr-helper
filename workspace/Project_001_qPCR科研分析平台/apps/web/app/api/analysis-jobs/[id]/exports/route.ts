@@ -3,7 +3,7 @@ import { persistAuthenticatedArtifact, readAuthenticatedExportSource } from "@/l
 import { runRExport } from "@/lib/r-client";
 import { allowRequest } from "@/lib/rate-limit";
 import { analysisRequestSchema, type AnalysisRequest } from "@/lib/analysis-request";
-import { hashCanonicalJson } from "@/lib/request-hash";
+import { hashAnalysisSource } from "@/lib/request-hash";
 import type { PlatformAnalysisResult } from "@/lib/result-types";
 import { NextResponse } from "next/server";
 
@@ -32,6 +32,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
   const { id } = await context.params;
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > 8_000_000) return NextResponse.json({ error: "REQUEST_TOO_LARGE" }, { status: 413 });
+  const text = await request.text();
+  if (Buffer.byteLength(text) > 8_000_000) return NextResponse.json({ error: "REQUEST_TOO_LARGE" }, { status: 413 });
+  let override: ReturnType<typeof analysisRequestSchema.safeParse> | null = null;
+  if (text) {
+    try {
+      override = analysisRequestSchema.safeParse(JSON.parse(text));
+    } catch {
+      return NextResponse.json({ error: "INVALID_EXPORT_SOURCE" }, { status: 422 });
+    }
+    if (!override.success) return NextResponse.json({ error: "INVALID_EXPORT_SOURCE", message: override.error.message }, { status: 422 });
+  }
   let input: AnalysisRequest | null = null;
   let result: PlatformAnalysisResult | null = null;
   const authenticated = await readAuthenticatedExportSource(id);
@@ -39,20 +52,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     input = authenticated.input as AnalysisRequest;
     result = authenticated.result as PlatformAnalysisResult;
   }
+  if (authenticated && override?.success && hashAnalysisSource(override.data) === hashAnalysisSource(authenticated.input)) {
+    input = override.data;
+  }
   if (!authenticated) {
     const guest = await guestJobRepository.read(id, request.headers.get("x-capability-token") ?? "");
     if (guest) {
-      const contentLength = Number(request.headers.get("content-length") ?? 0);
-      if (contentLength > 8_000_000) {
-        return NextResponse.json({ error: "REQUEST_TOO_LARGE" }, { status: 413 });
-      }
       try {
-        const text = await request.text();
-        if (Buffer.byteLength(text) > 8_000_000) {
-          return NextResponse.json({ error: "REQUEST_TOO_LARGE" }, { status: 413 });
-        }
-        const candidate = analysisRequestSchema.parse(JSON.parse(text));
-        if (hashCanonicalJson(candidate) !== guest.inputHash) {
+        if (!override?.success) throw new Error("Guest export requires the analysis source");
+        const candidate = override.data;
+        if (hashAnalysisSource(candidate) !== guest.inputHash) {
           return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
         }
         input = candidate;

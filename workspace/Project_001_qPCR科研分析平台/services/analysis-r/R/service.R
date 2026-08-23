@@ -153,6 +153,7 @@ run_preview_payload <- function(payload) {
   palette_name <- if (is.null(figure$palette)) "nature-muted" else as.character(figure$palette)
   p_label_mode <- if (is.null(figure$pLabelMode)) "stars" else as.character(figure$pLabelMode)
   show_points <- if (is.null(figure$showPoints)) TRUE else isTRUE(figure$showPoints)
+  custom_colors <- if (is.null(figure$customColors)) NULL else as.character(unlist(figure$customColors))
   analysis <- if (is.null(payload$analysis)) list() else payload$analysis
   contrasts <- payload_frame(analysis$contrasts)
   plot <- build_expression_plot(
@@ -163,7 +164,8 @@ run_preview_payload <- function(payload) {
     contrasts = contrasts,
     palette_name = palette_name,
     p_label_mode = p_label_mode,
-    show_points = show_points
+    show_points = show_points,
+    custom_colors = custom_colors
   )
   list(
     status = "succeeded",
@@ -209,6 +211,7 @@ run_export_payload <- function(payload, destination = tempfile("qpcr-export-")) 
     palette_name = if (is.null(figure$palette)) "nature-muted" else as.character(figure$palette),
     p_label_mode = if (is.null(figure$pLabelMode)) "stars" else as.character(figure$pLabelMode),
     show_points = if (is.null(figure$showPoints)) TRUE else isTRUE(figure$showPoints),
+    custom_colors = if (is.null(figure$customColors)) NULL else as.character(unlist(figure$customColors)),
     locale = if (is.null(payload$locale)) "en" else as.character(payload$locale)
   )
 }

@@ -43,6 +43,10 @@ export async function runRAnalysis(statisticsPayload: unknown, previewPayload: u
   };
 }
 
+export async function runRPreview(payload: unknown) {
+  return (await post("/v1/preview", payload)).json();
+}
+
 export async function runRExport(payload: unknown): Promise<ArrayBuffer> {
   return (await post("/v1/export", payload)).arrayBuffer();
 }

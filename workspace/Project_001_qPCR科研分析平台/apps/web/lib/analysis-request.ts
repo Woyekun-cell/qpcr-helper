@@ -10,12 +10,23 @@ import { z } from "zod";
 
 export const figureConfigSchema = z.object({
   plotType: z.enum(["bar", "dot", "box", "violin", "paired", "time", "heatmap"]),
-  widthMm: z.union([z.literal(90), z.literal(180)]),
-  heightMm: z.number().min(45).max(240),
+  widthMm: z.union([z.literal(90), z.literal(120), z.literal(150), z.literal(180)]),
+  heightMm: z.union([z.literal(60), z.literal(70), z.literal(75), z.literal(90), z.literal(105), z.literal(120)]),
   dpi: z.union([z.literal(300), z.literal(600)]),
-  palette: z.enum(["nature-muted", "prism", "okabe-ito", "tol-bright", "cool", "warm"]).default("nature-muted"),
+  palette: z.enum([
+    "nature-muted", "nature-earth", "cell-bright", "cell-soft", "prism",
+    "okabe-ito", "tol-bright", "morandi-sage", "morandi-dust", "morandi-blue", "morandi-earth",
+    "macaron-pastel", "macaron-candy", "macaron-gelato",
+    "gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset", "gradient-ocean",
+    "cool", "warm", "custom"
+  ]).default("nature-muted"),
   pLabelMode: z.enum(["stars", "exact", "stars-exact", "none"]).default("stars"),
-  showPoints: z.boolean().default(true)
+  showPoints: z.boolean().default(true),
+  customColors: z.array(z.string().regex(/^#[0-9A-Fa-f]{6}$/)).min(2).max(8).optional()
+}).superRefine((value, context) => {
+  if (value.palette === "custom" && !value.customColors) {
+    context.addIssue({ code: "custom", path: ["customColors"], message: "custom palette requires at least two colors" });
+  }
 });
 
 export const analysisRequestSchema = z.object({

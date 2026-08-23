@@ -1,15 +1,36 @@
 qpcr_palettes <- list(
   `nature-muted` = c("#4F6B45", "#D98268", "#4C6F91", "#7A6B98", "#B58B43", "#4D8C88", "#777777"),
+  `nature-earth` = c("#496A4B", "#B7654F", "#4E6F8E", "#A88A4C", "#75658C", "#52847F", "#777777"),
+  `cell-bright` = c("#3B82B5", "#E0764C", "#50A56C", "#D6A43B", "#9A6EB4", "#45A3A5", "#C95B76"),
+  `cell-soft` = c("#5B7FA3", "#C9826A", "#719477", "#C2A15D", "#8C789D", "#6B9998", "#B77783"),
   prism = c("#3B75AF", "#E06B65", "#59A14F", "#F0A43A", "#8B6BB1", "#4FA3A5", "#9A6A4F"),
   `okabe-ito` = c("#0072B2", "#D55E00", "#009E73", "#E69F00", "#CC79A7", "#56B4E9", "#000000"),
   `tol-bright` = c("#4477AA", "#EE6677", "#228833", "#CCBB44", "#AA3377", "#66CCEE", "#BBBBBB"),
+  `morandi-sage` = c("#7E8B76", "#B8897D", "#8091A0", "#A59B79", "#8E8294", "#75928F", "#9A9189"),
+  `morandi-dust` = c("#9C7F7B", "#B59A8B", "#7D8C91", "#9A9277", "#8B7D86", "#708681", "#A6A09A"),
+  `morandi-blue` = c("#667C8A", "#8EA0AA", "#9A7E79", "#7F9082", "#91869B", "#A69B82", "#7A7774"),
+  `morandi-earth` = c("#897568", "#A98576", "#6F8179", "#9A906F", "#7E7480", "#A3988F", "#696D68"),
+  `macaron-pastel` = c("#8EC5E8", "#F3A6A0", "#9ED9B5", "#F3D58A", "#C6A8E0", "#91D5D2", "#F1B3CF"),
+  `macaron-candy` = c("#69B7EB", "#FF8F86", "#76D39B", "#FFD36E", "#B995E4", "#65CECC", "#F38FB5"),
+  `macaron-gelato` = c("#A7C7E7", "#F4B6A8", "#B7D7B0", "#F2D49B", "#C9B5D9", "#A6D5D2", "#E9B7C7"),
+  `gradient-blue-red` = c("#315B8A", "#F6F3EE", "#B64F4A", "#6E84A3", "#D98272"),
+  `gradient-purple-green` = c("#6B4C8A", "#F5F3ED", "#4D8B72", "#9A7CB3", "#7BB29D"),
+  `gradient-teal-coral` = c("#287D7B", "#F7F3EC", "#D66B5D", "#6AA9A5", "#E59B8D"),
+  `gradient-sunset` = c("#574B90", "#F6C98B", "#C84A5A", "#8B6DA8", "#E88A64"),
+  `gradient-ocean` = c("#173F5F", "#63B7AF", "#E6F4F1", "#2C7DA0", "#80CED7"),
   cool = c("#2F5D8A", "#5A8BB5", "#63A7A3", "#8CB9A8", "#8073AC", "#B2ABD2", "#6B7280"),
   warm = c("#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55")
 )
 
-resolve_palette <- function(palette_name, groups) {
-  palette <- qpcr_palettes[[palette_name]]
+resolve_palette_values <- function(palette_name, custom_colors = NULL) {
+  palette <- if (identical(palette_name, "custom")) custom_colors else qpcr_palettes[[palette_name]]
   if (is.null(palette)) stop(sprintf("Unknown figure palette: %s", palette_name))
+  if (length(palette) < 2 || any(!grepl("^#[0-9A-Fa-f]{6}$", palette))) stop("Figure palettes require at least two hex colors")
+  palette
+}
+
+resolve_palette <- function(palette_name, groups, custom_colors = NULL) {
+  palette <- resolve_palette_values(palette_name, custom_colors)
   stats::setNames(rep(palette, length.out = length(groups)), groups)
 }
 
@@ -86,9 +107,9 @@ group_interval <- function(samples, group_columns, confidence_level = 0.95) {
   result
 }
 
-group_colors <- function(samples, palette_name = "nature-muted") {
+group_colors <- function(samples, palette_name = "nature-muted", custom_colors = NULL) {
   groups <- if (is.factor(samples$groupId)) levels(droplevels(samples$groupId)) else unique(as.character(samples$groupId))
-  resolve_palette(palette_name, groups)
+  resolve_palette(palette_name, groups, custom_colors)
 }
 
 significance_label <- function(p_value, mode = "stars") {
@@ -135,13 +156,15 @@ build_expression_plot <- function(
   contrasts = NULL,
   palette_name = "nature-muted",
   p_label_mode = "stars",
-  show_points = TRUE
+  show_points = TRUE,
+  custom_colors = NULL
 ) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Figures require ggplot2")
   plot_type <- match.arg(plot_type)
   validate_figure_samples(samples, plot_type)
   samples$groupId <- factor(samples$groupId, levels = unique(as.character(samples$groupId)))
-  colors <- group_colors(samples, palette_name)
+  palette_values <- resolve_palette_values(palette_name, custom_colors)
+  colors <- group_colors(samples, palette_name, custom_colors)
   title <- title %||% ""
   multiple_genes <- length(unique(as.character(samples$targetGene))) > 1
 
@@ -159,11 +182,16 @@ build_expression_plot <- function(
     }
     limit <- max(abs(matrix_data), na.rm = TRUE)
     if (!is.finite(limit) || limit == 0) limit <- 1
+    heat_colors <- if (startsWith(palette_name, "gradient-") && length(palette_values) >= 3) {
+      palette_values[1:3]
+    } else {
+      c(palette_values[1], "#F7F7F4", palette_values[2])
+    }
     return(
       ComplexHeatmap::Heatmap(
         matrix_data,
         name = "log2 FC",
-        col = circlize::colorRamp2(c(-limit, 0, limit), c("#3B648A", "#F7F7F4", "#B9584F")),
+        col = circlize::colorRamp2(c(-limit, 0, limit), heat_colors),
         cluster_rows = nrow(matrix_data) >= 3,
         cluster_columns = FALSE,
         row_names_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 6.5),
@@ -171,7 +199,9 @@ build_expression_plot <- function(
         column_title = if (nzchar(title)) title else NULL,
         column_title_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 7, fontface = "bold"),
         heatmap_legend_param = list(title_gp = grid::gpar(fontsize = 6.5), labels_gp = grid::gpar(fontsize = 6)),
-        rect_gp = grid::gpar(col = "white", lwd = 0.5)
+        rect_gp = grid::gpar(col = "black", lwd = 0.55),
+        width = grid::unit(ncol(matrix_data), "null"),
+        height = grid::unit(nrow(matrix_data), "null")
       )
     )
   }
@@ -263,6 +293,8 @@ build_expression_plot <- function(
     ggplot2::scale_x_discrete(labels = group_labels) +
     ggplot2::labs(x = NULL, y = "Relative expression (2^−ΔΔCt)", title = title) +
     theme_qpcr_nature()
+  annotations <- significance_annotations(samples, contrasts, p_label_mode)
+  top_expansion <- if (nrow(annotations) > 0) 0.24 else 0.08
   if (plot_type != "bar") {
     plot <- plot +
       ggplot2::geom_point(
@@ -274,18 +306,16 @@ build_expression_plot <- function(
         stroke = 0.5,
         colour = "#1E211D"
       ) +
-      ggplot2::scale_y_log10()
+      ggplot2::scale_y_log10(expand = ggplot2::expansion(mult = c(0.04, top_expansion)))
   } else {
-    annotations <- significance_annotations(samples, contrasts, p_label_mode)
-    top_expansion <- if (nrow(annotations) > 0) 0.2 else 0.08
     plot <- plot + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, top_expansion)))
-    if (nrow(annotations) > 0) {
-      plot <- plot +
-        ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x1, xend = x2, y = y, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
-        ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x1, xend = x1, y = tick, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
-        ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x2, xend = x2, y = tick, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
-        ggplot2::geom_text(data = annotations, ggplot2::aes(x = xmid, y = y, label = label), inherit.aes = FALSE, vjust = -0.35, family = "Helvetica", size = 2.2)
-    }
+  }
+  if (nrow(annotations) > 0) {
+    plot <- plot +
+      ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x1, xend = x2, y = y, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
+      ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x1, xend = x1, y = tick, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
+      ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x2, xend = x2, y = tick, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
+      ggplot2::geom_text(data = annotations, ggplot2::aes(x = xmid, y = y, label = label), inherit.aes = FALSE, vjust = -0.35, family = "Helvetica", size = 2.2)
   }
   if (multiple_genes) plot <- plot + ggplot2::facet_wrap(~targetGene, scales = if (plot_type == "bar") "free_y" else "fixed")
   plot

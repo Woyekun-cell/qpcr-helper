@@ -59,4 +59,23 @@ describe("analysis API preparation", () => {
       showPoints: true
     });
   });
+
+  it("accepts categorized palettes, custom colors and graduated dimensions", () => {
+    const experiment = createDemoExperiment("en");
+    const prepared = prepareAnalysis({
+      experiment,
+      config: defaultAnalysisConfig(experiment),
+      figure: {
+        plotType: "bar",
+        widthMm: 150,
+        heightMm: 90,
+        dpi: 600,
+        palette: "morandi-sage",
+        pLabelMode: "stars-exact",
+        showPoints: true,
+        customColors: ["#667766", "#DDBBAA"]
+      }
+    });
+    expect(prepared.previewPayload.figure).toMatchObject({ widthMm: 150, heightMm: 90, palette: "morandi-sage" });
+  });
 });
