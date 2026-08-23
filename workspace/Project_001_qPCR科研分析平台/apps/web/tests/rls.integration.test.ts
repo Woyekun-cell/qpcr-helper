@@ -17,6 +17,7 @@ describe.skipIf(!ready)("Supabase cross-account RLS", () => {
   const secondProjectId = crypto.randomUUID();
   const versionId = crypto.randomUUID();
   const jobId = crypto.randomUUID();
+  let storagePath = "";
 
   beforeAll(async () => {
     admin = createClient(url!, service!, { auth: { persistSession: false } });
@@ -30,6 +31,7 @@ describe.skipIf(!ready)("Supabase cross-account RLS", () => {
     const two = await createUser("two");
     firstUser = one.user;
     secondUser = two.user;
+    storagePath = `${firstUser.id}/${jobId}/rls-fixture.txt`;
     first = createClient(url!, anon!, { auth: { persistSession: false } });
     second = createClient(url!, anon!, { auth: { persistSession: false } });
     await first.auth.signInWithPassword({ email: one.email, password });
@@ -65,10 +67,15 @@ describe.skipIf(!ready)("Supabase cross-account RLS", () => {
       status: "succeeded"
     });
     if (jobError) throw jobError;
+    const { error: storageError } = await first.storage
+      .from("analysis-artifacts")
+      .upload(storagePath, new Blob(["private qPCR artifact"], { type: "text/plain" }));
+    if (storageError) throw storageError;
   });
 
   afterAll(async () => {
     if (!admin) return;
+    await first.storage.from("analysis-artifacts").remove([storagePath]);
     await first.from("projects").delete().eq("id", projectId);
     await second.from("projects").delete().eq("id", secondProjectId);
     await admin.auth.admin.deleteUser(firstUser.id);
@@ -107,5 +114,15 @@ describe.skipIf(!ready)("Supabase cross-account RLS", () => {
     expect(qc.error).not.toBeNull();
     expect(job.error).not.toBeNull();
     expect(artifact.error).not.toBeNull();
+  });
+
+  it("prevents cross-account artifact download and deletion", async () => {
+    const forbiddenDownload = await second.storage.from("analysis-artifacts").download(storagePath);
+    expect(forbiddenDownload.error).not.toBeNull();
+
+    await second.storage.from("analysis-artifacts").remove([storagePath]);
+    const ownerDownload = await first.storage.from("analysis-artifacts").download(storagePath);
+    expect(ownerDownload.error).toBeNull();
+    expect(await ownerDownload.data?.text()).toBe("private qPCR artifact");
   });
 });

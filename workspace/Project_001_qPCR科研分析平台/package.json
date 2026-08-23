@@ -14,7 +14,9 @@
     "test:web": "pnpm --filter @qpcr/web test",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
-    "check:contrast": "node scripts/check-contrast.mjs"
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "check:responsive": "node scripts/check-responsive-css.mjs",
+    "e2e:local": "node scripts/e2e-local.mjs"
   },
   "devDependencies": {
     "typescript": "6.0.3",

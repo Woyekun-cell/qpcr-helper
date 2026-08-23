@@ -106,6 +106,33 @@ expect_error(
   "paired_two_group requires subjectId"
 )
 
+paired_fixture <- data.frame(
+  sampleId = c(paste0("c", 1:6), paste0("t", 1:6)),
+  subjectId = rep(paste0("subject-", 1:6), 2),
+  groupId = factor(c(rep("control", 6), rep("treated", 6)), levels = c("control", "treated")),
+  targetGene = "GENE1",
+  deltaCt = c(
+    5.0, 5.2, 4.8, 5.1, 4.9, 5.3,
+    c(5.0, 5.2, 4.8, 5.1, 4.9, 5.3) - c(1.7, 1.8, 1.9, 2.1, 2.2, 2.3)
+  ),
+  stringsAsFactors = FALSE
+)
+paired_result <- run_statistics(
+  paired_fixture,
+  design = "paired_two_group",
+  calibrator_group = "control"
+)
+expect_equal(paired_result$method, "Paired t-test")
+expect_equal(round(paired_result$contrasts$fold_change, 8), 4)
+paired_nonparametric <- run_statistics(
+  paired_fixture,
+  design = "paired_two_group",
+  calibrator_group = "control",
+  method = "wilcoxon"
+)
+expect_equal(paired_nonparametric$method, "Wilcoxon signed-rank test")
+expect_equal(paired_nonparametric$independent_n, c(control = 6, treated = 6))
+
 one_way_fixture <- data.frame(
   sampleId = paste0("s", 1:9),
   groupId = factor(rep(c("control", "low", "high"), each = 3), levels = c("control", "low", "high")),

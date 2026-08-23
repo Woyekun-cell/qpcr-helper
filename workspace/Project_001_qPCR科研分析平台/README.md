@@ -24,7 +24,7 @@ cd services/analysis-r && Rscript run.R
 pnpm dev
 ```
 
-访问 `http://localhost:3000`，可直接载入八倍表达演示。测试：`pnpm test && pnpm typecheck && pnpm lint && pnpm check:contrast && pnpm build`；R 测试位于 `services/analysis-r/tests`。
+访问 `http://localhost:3000`，可载入八倍表达演示。测试：`pnpm test && pnpm typecheck && pnpm lint && pnpm check:contrast && pnpm check:responsive && pnpm build`；启动两服务后运行 `pnpm e2e:local`。
 
 ## 部署
 
