@@ -73,6 +73,13 @@ nonparametric_two_group <- run_statistics(
   method = "nonparametric"
 )
 expect_equal(nonparametric_two_group$method, "Mann-Whitney U test")
+named_nonparametric <- run_statistics(
+  fixture,
+  design = "independent_two_group",
+  calibrator_group = "control",
+  method = "mann_whitney"
+)
+expect_equal(named_nonparametric$method, "Mann-Whitney U test")
 if (!is.finite(nonparametric_two_group$contrasts$estimate_delta_ct)) {
   stop("Nonparametric contrast must include a Hodges-Lehmann estimate")
 }
@@ -114,6 +121,10 @@ dunnett <- run_statistics(
 )
 expect_equal(dunnett$method, "One-way ANOVA with Dunnett comparisons")
 expect_equal(nrow(dunnett$contrasts), 2)
+expect_equal(
+  dunnett$contrasts$p_adjusted,
+  c(2.37327703360601e-04, 3.91502528285237e-07)
+)
 if (!all(grepl("- control", dunnett$contrasts$contrast, fixed = TRUE))) {
   stop("Dunnett output must compare each treatment with the calibrator")
 }
@@ -127,6 +138,31 @@ tukey <- run_statistics(
 )
 expect_equal(tukey$method, "One-way ANOVA with Tukey HSD comparisons")
 expect_equal(nrow(tukey$contrasts), 3)
+expect_equal(
+  tukey$contrasts$p_adjusted,
+  c(3.21024793707991e-04, 7.28528366744641e-07, 5.42583224449888e-06)
+)
+named_tukey <- run_statistics(
+  one_way_fixture,
+  design = "one_way",
+  calibrator_group = "control",
+  contrast_mode = "all_pairs",
+  correction = "tukey",
+  method = "anova"
+)
+expect_equal(named_tukey$method, "One-way ANOVA with Tukey HSD comparisons")
+
+selected <- run_statistics(
+  one_way_fixture,
+  design = "one_way",
+  calibrator_group = "control",
+  contrast_mode = "selected",
+  correction = "holm",
+  selected_comparisons = list(list(numerator = "high", denominator = "low"))
+)
+expect_equal(selected$method, "Welch t-tests for selected comparisons")
+expect_equal(selected$contrasts$contrast, "high - low")
+expect_equal(round(selected$contrasts$fold_change, 8), 4)
 
 dunn <- run_statistics(
   one_way_fixture,

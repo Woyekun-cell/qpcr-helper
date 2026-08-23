@@ -374,6 +374,53 @@ dunn_statistics <- function(data, calibrator_group, contrast_mode, correction) {
   )
 }
 
+selected_welch_statistics <- function(data, selected_comparisons, correction) {
+  if (is.null(selected_comparisons) || length(selected_comparisons) == 0) {
+    stop("Selected one-way comparisons require at least one numerator/denominator pair")
+  }
+  groups <- unique(as.character(data$groupId))
+  rows <- lapply(selected_comparisons, function(comparison) {
+    numerator <- as.character(comparison$numerator)
+    denominator <- as.character(comparison$denominator)
+    if (length(numerator) != 1 || length(denominator) != 1 ||
+        !numerator %in% groups || !denominator %in% groups || identical(numerator, denominator)) {
+      stop("Selected comparison contains an unknown or identical group")
+    }
+    numerator_values <- data$deltaCt[as.character(data$groupId) == numerator]
+    denominator_values <- data$deltaCt[as.character(data$groupId) == denominator]
+    test <- stats::t.test(numerator_values, denominator_values, var.equal = FALSE)
+    estimate <- mean(numerator_values) - mean(denominator_values)
+    data.frame(
+      target_gene = unique(as.character(data$targetGene)),
+      contrast = sprintf("%s - %s", numerator, denominator),
+      estimate_delta_ct = estimate,
+      ci_low_delta_ct = unname(test$conf.int[1]),
+      ci_high_delta_ct = unname(test$conf.int[2]),
+      fold_change = 2^(-estimate),
+      fold_change_ci_low = 2^(-unname(test$conf.int[2])),
+      fold_change_ci_high = 2^(-unname(test$conf.int[1])),
+      statistic = unname(test$statistic),
+      degrees_freedom = unname(test$parameter),
+      p_value = test$p.value,
+      stringsAsFactors = FALSE
+    )
+  })
+  contrasts <- do.call(rbind, rows)
+  contrasts$p_adjusted <- adjust_pvalues(contrasts$p_value, correction)
+  omnibus <- stats::oneway.test(deltaCt ~ groupId, data = data, var.equal = FALSE)
+  list(
+    method = "Welch t-tests for selected comparisons",
+    omnibus = data.frame(
+      statistic = unname(omnibus$statistic),
+      degrees_freedom_1 = unname(omnibus$parameter[1]),
+      degrees_freedom_2 = unname(omnibus$parameter[2]),
+      p_value = omnibus$p.value
+    ),
+    contrasts = contrasts,
+    diagnostics = list(analysis_unit = "biological replicate", scale = "delta Ct")
+  )
+}
+
 dunnett_statistics <- function(data, calibrator_group) {
   if (!requireNamespace("multcomp", quietly = TRUE)) {
     stop("Dunnett comparisons require the multcomp package")
@@ -493,7 +540,8 @@ run_statistics <- function(
   calibrator_group,
   correction = "holm",
   contrast_mode = "selected",
-  method = "recommended"
+  method = "recommended",
+  selected_comparisons = NULL
 ) {
   validate_statistics_input(data, design, calibrator_group)
   genes <- unique(as.character(data$targetGene))
@@ -501,19 +549,22 @@ run_statistics <- function(
     stop("run_statistics accepts one targetGene at a time; combine p values explicitly across genes")
   }
   if (design %in% c("independent_two_group", "paired_two_group")) {
-    if (method == "nonparametric") {
+    if (method %in% c("nonparametric", "mann_whitney", "wilcoxon")) {
       return(nonparametric_two_group_statistics(data, design, calibrator_group, correction))
     }
     return(two_group_statistics(data, design, calibrator_group, correction))
   }
   if (design == "one_way") {
-    if (method == "nonparametric") {
+    if (contrast_mode == "selected") {
+      return(selected_welch_statistics(data, selected_comparisons, correction))
+    }
+    if (method %in% c("nonparametric", "kruskal_wallis")) {
       return(dunn_statistics(data, calibrator_group, contrast_mode, correction))
     }
     if (contrast_mode == "control") {
       return(dunnett_statistics(data, calibrator_group))
     }
-    if (method == "equal_variance") {
+    if (method %in% c("equal_variance", "anova")) {
       return(tukey_statistics(data))
     }
     return(one_way_statistics(data))

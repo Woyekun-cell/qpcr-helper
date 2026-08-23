@@ -39,6 +39,10 @@ if (!"GeomPoint" %in% layer_geoms) stop("Dot plot must expose independent observ
 if (!"GeomErrorbar" %in% layer_geoms) stop("Dot plot must include 95% confidence intervals")
 expected_axis <- expression("Relative expression (" * 2^{-Delta * Delta * C[t]} * ")")
 if (!identical(dot_plot$labels$y, expected_axis)) stop("Unexpected y-axis label")
+x_scale <- dot_plot$scales$get_scales("x")
+if (is.null(x_scale) || !all(grepl("n = 3", unname(x_scale$labels), fixed = TRUE))) {
+  stop("Figure x-axis must report biological n for each group")
+}
 
 paired <- samples
 paired$subjectId <- rep(c("subject-1", "subject-2", "subject-3"), 2)
@@ -50,6 +54,8 @@ heat_samples <- rbind(samples, transform(samples, targetGene = "GENE2", foldChan
 heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap")
 heat_geoms <- vapply(heatmap$layers, function(layer) class(layer$geom)[1], character(1))
 if (!"GeomTile" %in% heat_geoms) stop("Heatmap must use tiles")
+multi_gene_dot <- build_expression_plot(heat_samples, plot_type = "dot")
+if (!inherits(multi_gene_dot$facet, "FacetWrap")) stop("Multi-gene dot plots must facet by target gene")
 
 legend <- build_figure_legend(
   samples = samples,

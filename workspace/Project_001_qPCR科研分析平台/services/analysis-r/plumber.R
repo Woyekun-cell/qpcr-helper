@@ -13,6 +13,17 @@ allowed_origins <- function() {
   trimws(strsplit(value, ",", fixed = TRUE)[[1]])
 }
 
+#* @filter authenticate
+function(req, res) {
+  if (identical(req$PATH_INFO, "/health")) return(forward())
+  secret <- Sys.getenv("ANALYSIS_R_SHARED_SECRET", unset = "")
+  if (!request_authorized(req$HTTP_AUTHORIZATION %||% "", secret)) {
+    res$status <- 404L
+    return(list(status = "not_found"))
+  }
+  forward()
+}
+
 #* @filter cors
 function(req, res) {
   origin <- req$HTTP_ORIGIN
@@ -31,14 +42,14 @@ function(req, res) {
 
 #* Liveness probe
 #* @get /health
-#* @serializer unboxedJSON
+#* @serializer unboxedJSON list(digits=15, na="null")
 function() {
   list(status = "ok", service = "qpcr-analysis-r", backend = "R")
 }
 
 #* Design-driven qPCR statistics
 #* @post /v1/analyze
-#* @serializer unboxedJSON
+#* @serializer unboxedJSON list(digits=15, na="null")
 function(req, res) {
   tryCatch(
     run_analysis_payload(parse_request_json(req)),
@@ -51,7 +62,7 @@ function(req, res) {
 
 #* Render an editable R/ggplot2 SVG preview
 #* @post /v1/preview
-#* @serializer unboxedJSON
+#* @serializer unboxedJSON list(digits=15, na="null")
 function(req, res) {
   tryCatch(
     run_preview_payload(parse_request_json(req)),

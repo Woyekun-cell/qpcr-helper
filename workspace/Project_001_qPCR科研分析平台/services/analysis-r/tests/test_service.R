@@ -7,6 +7,9 @@ source(file.path("R", "service.R"))
 source(file.path("R", "figures.R"))
 source(file.path("R", "export.R"))
 
+if (!request_authorized("Bearer test-secret", "test-secret")) stop("Valid service token was rejected")
+if (request_authorized("Bearer wrong", "test-secret")) stop("Invalid service token was accepted")
+
 expect_equal <- function(actual, expected, tolerance = 1e-10) {
   if (!isTRUE(all.equal(actual, expected, tolerance = tolerance, check.attributes = FALSE))) {
     stop(sprintf("Expected %s, got %s", paste(expected, collapse = ", "), paste(actual, collapse = ", ")))

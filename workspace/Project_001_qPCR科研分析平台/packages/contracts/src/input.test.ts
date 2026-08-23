@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   normalizeImportedWells,
+  analysisConfigSchema,
+  qcDecisionSchema,
   experimentInputJsonSchema,
   validateExperimentDesign,
   type ExperimentInput
@@ -66,6 +68,34 @@ describe("experiment design validation", () => {
       "MISSING_FACTOR_LEVEL",
       "MISSING_FACTOR_LEVEL"
     ]);
+  });
+
+  test("detects unmatched paired subjects", () => {
+    const input: ExperimentInput = {
+      ...base,
+      wells: base.wells.map((well) => ({ ...well, subjectId: "subject-1" }))
+    };
+    expect(validateExperimentDesign(input)).toEqual([
+      {
+        code: "UNMATCHED_SUBJECT",
+        path: "wells.subjectId",
+        message: "Subject subject-1 is missing one or more paired groups."
+      }
+    ]);
+  });
+
+  test("detects an incomplete two-factor combination", () => {
+    const source = base.wells[0]!;
+    const input: ExperimentInput = {
+      ...base,
+      design: "two_way",
+      wells: [
+        { ...source, wellId: "F1", factorA: "vehicle", factorB: "early" },
+        { ...source, wellId: "F2", factorA: "vehicle", factorB: "late" },
+        { ...source, wellId: "F3", factorA: "drug", factorB: "early" }
+      ]
+    };
+    expect(validateExperimentDesign(input).map((issue) => issue.code)).toContain("MISSING_FACTOR_COMBINATION");
   });
 
   test("reports duplicate well identifiers and unknown groups", () => {
@@ -137,4 +167,34 @@ test("publishes a JSON Schema with the required analysis fields", () => {
       "wells"
     ])
   });
+});
+
+test("validates explicit statistical and QC decisions", () => {
+  expect(
+    analysisConfigSchema.parse({
+      design: "independent_two_group",
+      calibratorGroup: "control",
+      contrastMode: "selected",
+      correction: "holm",
+      method: "recommended",
+      alpha: 0.05,
+      confidenceLevel: 0.95
+    })
+  ).toMatchObject({ correction: "holm", confidenceLevel: 0.95 });
+  expect(() => analysisConfigSchema.parse({
+    design: "one_way",
+    calibratorGroup: "control",
+    contrastMode: "all_pairs",
+    correction: "tukey",
+    method: "recommended",
+    alpha: 0.05,
+    confidenceLevel: 1.2
+  })).toThrow();
+  expect(qcDecisionSchema.parse({
+    wellId: "A1",
+    decision: "excluded",
+    reason: "Manual review",
+    operator: "user-1",
+    decidedAt: "2026-08-23T10:00:00.000Z"
+  }).decision).toBe("excluded");
 });

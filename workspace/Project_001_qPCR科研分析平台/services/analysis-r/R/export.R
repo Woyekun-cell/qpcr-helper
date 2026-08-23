@@ -168,16 +168,24 @@ create_research_export <- function(
   write_utf8_lines(reproduce_script, file.path(bundle_directory, "reproduce.R"))
 
   files_before_manifest <- list.files(bundle_directory, full.names = TRUE)
+  if (!requireNamespace("digest", quietly = TRUE)) stop("Export manifest requires digest")
   manifest_files <- data.frame(
-    file = basename(files_before_manifest),
+    path = basename(files_before_manifest),
     bytes = unname(file.info(files_before_manifest)$size),
-    md5 = unname(tools::md5sum(files_before_manifest)),
+    sha256 = vapply(
+      files_before_manifest,
+      function(path) digest::digest(path, algo = "sha256", file = TRUE),
+      character(1)
+    ),
     stringsAsFactors = FALSE
   )
   manifest <- list(
     schemaVersion = "1.0",
-    createdAt = format(Sys.time(), tz = "UTC", usetz = TRUE),
+    createdAt = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    appVersion = Sys.getenv("APP_VERSION", unset = "0.1.0"),
+    rVersion = R.version.string,
     backend = "R",
+    parameters = parameters,
     files = manifest_files
   )
   jsonlite::write_json(
@@ -193,4 +201,3 @@ create_research_export <- function(
   zip::zipr(zip_path, list.files(bundle_directory, full.names = TRUE), root = bundle_directory)
   list(directory = bundle_directory, zip = zip_path, manifest = manifest)
 }
-

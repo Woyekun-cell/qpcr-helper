@@ -117,6 +117,19 @@ describe("2^-ΔΔCt analysis", () => {
     expect(result.qc.some((item) => item.code === "SINGLE_TECHNICAL_REPLICATE")).toBe(true);
   });
 
+  test("reports technical-replicate dispersion without automatic exclusion", () => {
+    const input = twoGroupExperiment();
+    const changed = input.wells.find((well) => well.wellId === "t1-GENE1-2");
+    if (!changed) throw new Error("fixture well missing");
+    changed.ct = 22.4;
+    const result = analyzeDeltaDeltaCt(input);
+    const finding = result.qc.find(
+      (item) => item.code === "TECHNICAL_REPLICATE_DISPERSION" && item.sampleId === "t1" && item.gene === "GENE1"
+    );
+    expect(finding?.dispersionCt).toBeCloseTo(0.4, 12);
+    expect(input.wells.filter((well) => well.sampleId === "t1").every((well) => well.status === "accepted")).toBe(true);
+  });
+
   test("rejects a biological sample without a valid reference Ct", () => {
     const input = twoGroupExperiment();
     input.wells = input.wells.map((well) =>

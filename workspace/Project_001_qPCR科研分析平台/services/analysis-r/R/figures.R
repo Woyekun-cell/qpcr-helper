@@ -48,7 +48,14 @@ group_interval <- function(samples, group_columns) {
   pieces <- split(samples, split_key)
   rows <- lapply(pieces, function(piece) {
     center <- mean(piece$log2_fold)
-    n <- nrow(piece)
+    analysis_ids <- if ("subjectId" %in% names(piece)) {
+      piece$subjectId
+    } else if ("biologicalReplicateId" %in% names(piece)) {
+      piece$biologicalReplicateId
+    } else {
+      piece$sampleId
+    }
+    n <- length(unique(analysis_ids))
     margin <- if (n > 1) stats::qt(0.975, df = n - 1) * stats::sd(piece$log2_fold) / sqrt(n) else NA_real_
     values <- as.list(piece[1, group_columns, drop = FALSE])
     c(
@@ -83,6 +90,7 @@ build_expression_plot <- function(
   samples$groupId <- factor(samples$groupId, levels = unique(as.character(samples$groupId)))
   colors <- group_colors(samples)
   title <- title %||% ""
+  multiple_genes <- length(unique(as.character(samples$targetGene))) > 1
 
   if (plot_type == "heatmap") {
     samples$log2_fold <- log2(samples$foldChange)
@@ -108,9 +116,9 @@ build_expression_plot <- function(
   }
 
   if (plot_type == "time") {
-    summary_data <- group_interval(samples, c("groupId", "time"))
-    return(
-      ggplot2::ggplot(samples, ggplot2::aes(x = time, y = foldChange, colour = groupId)) +
+    summary_columns <- if (multiple_genes) c("targetGene", "groupId", "time") else c("groupId", "time")
+    summary_data <- group_interval(samples, summary_columns)
+    time_plot <- ggplot2::ggplot(samples, ggplot2::aes(x = time, y = foldChange, colour = groupId)) +
         ggplot2::geom_line(ggplot2::aes(group = subjectId), linewidth = 0.3, alpha = 0.25) +
         ggplot2::geom_point(size = 1.3, alpha = 0.7) +
         ggplot2::geom_line(
@@ -129,10 +137,21 @@ build_expression_plot <- function(
         ggplot2::labs(x = "Time", y = expression("Relative expression (" * 2^{-Delta * Delta * C[t]} * ")"), title = title) +
         theme_qpcr_nature() +
         ggplot2::theme(legend.position = "top")
-    )
+    if (multiple_genes) time_plot <- time_plot + ggplot2::facet_wrap(~targetGene)
+    return(time_plot)
   }
 
-  summary_data <- group_interval(samples, "groupId")
+  summary_columns <- if (multiple_genes) c("targetGene", "groupId") else "groupId"
+  summary_data <- group_interval(samples, summary_columns)
+  group_n <- vapply(
+    split(samples, samples$groupId),
+    function(piece) {
+      ids <- if ("subjectId" %in% names(piece)) piece$subjectId else if ("biologicalReplicateId" %in% names(piece)) piece$biologicalReplicateId else piece$sampleId
+      length(unique(ids))
+    },
+    integer(1)
+  )
+  group_labels <- stats::setNames(sprintf("%s\nn = %d", names(group_n), group_n), names(group_n))
   plot <- ggplot2::ggplot(samples, ggplot2::aes(x = groupId, y = foldChange, colour = groupId))
   if (plot_type == "box") {
     plot <- plot + ggplot2::geom_boxplot(width = 0.5, outlier.shape = NA, linewidth = 0.4, colour = "#575B54", fill = NA)
@@ -148,7 +167,7 @@ build_expression_plot <- function(
       alpha = 0.8
     )
   }
-  plot +
+  plot <- plot +
     ggplot2::geom_point(
       position = ggplot2::position_jitter(width = 0.075, height = 0, seed = 104),
       size = 1.65,
@@ -173,9 +192,12 @@ build_expression_plot <- function(
       colour = "#1E211D"
     ) +
     ggplot2::scale_colour_manual(values = colors) +
+    ggplot2::scale_x_discrete(labels = group_labels) +
     ggplot2::scale_y_log10() +
     ggplot2::labs(x = NULL, y = expression("Relative expression (" * 2^{-Delta * Delta * C[t]} * ")"), title = title) +
     theme_qpcr_nature()
+  if (multiple_genes) plot <- plot + ggplot2::facet_wrap(~targetGene)
+  plot
 }
 
 `%||%` <- function(value, fallback) {
@@ -243,13 +265,17 @@ save_publication_figure <- function(plot, file_stem, width_mm = 90, height_mm = 
   print(plot)
   grDevices::dev.off()
 
-  grDevices::pdf(
-    paths$pdf,
-    width = width,
-    height = height,
-    family = "Helvetica",
-    useDingbats = FALSE
-  )
+  if (identical(Sys.info()[["sysname"]], "Darwin") && capabilities("aqua")) {
+    grDevices::quartz(
+      type = "pdf",
+      file = paths$pdf,
+      width = width,
+      height = height,
+      family = "Helvetica"
+    )
+  } else {
+    grDevices::cairo_pdf(paths$pdf, width = width, height = height, family = "Helvetica")
+  }
   print(plot)
   grDevices::dev.off()
 

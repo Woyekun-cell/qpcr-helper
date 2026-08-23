@@ -13,6 +13,11 @@ rows_to_data_frame <- function(rows) {
   data
 }
 
+request_authorized <- function(authorization, shared_secret) {
+  if (!nzchar(shared_secret)) return(FALSE)
+  identical(authorization, paste("Bearer", shared_secret))
+}
+
 required_config_value <- function(config, name) {
   value <- config[[name]]
   if (is.null(value) || length(value) != 1 || is.na(value) || !nzchar(as.character(value))) {
@@ -52,7 +57,8 @@ run_analysis_payload <- function(payload) {
         calibrator_group = calibrator_group,
         correction = within_gene_correction,
         contrast_mode = contrast_mode,
-        method = method
+        method = method,
+        selected_comparisons = config$selectedComparisons
       )
     )
   })
@@ -78,7 +84,8 @@ run_analysis_payload <- function(payload) {
       calibratorGroup = calibrator_group,
       correction = correction,
       contrastMode = contrast_mode,
-      method = method
+      method = method,
+      selectedComparisons = config$selectedComparisons
     ),
     analyses = analyses,
     contrasts = contrasts,

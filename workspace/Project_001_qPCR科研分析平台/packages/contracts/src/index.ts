@@ -8,6 +8,53 @@ export const analysisDesignSchema = z.enum([
   "repeated_time"
 ]);
 
+export const analysisConfigSchema = z.object({
+  design: analysisDesignSchema,
+  calibratorGroup: z.string().trim().min(1),
+  contrastMode: z.enum(["control", "all_pairs", "selected"]),
+  correction: z.enum(["none", "holm", "BH", "tukey", "games-howell", "dunnett"]),
+  method: z.enum([
+    "recommended",
+    "welch_t",
+    "paired_t",
+    "mann_whitney",
+    "wilcoxon",
+    "welch_anova",
+    "anova",
+    "kruskal_wallis",
+    "linear_model",
+    "mixed_model"
+  ]),
+  selectedComparisons: z.array(z.object({
+    numerator: z.string().trim().min(1),
+    denominator: z.string().trim().min(1)
+  }).refine((comparison) => comparison.numerator !== comparison.denominator, {
+    message: "selected comparison groups must differ"
+  })).optional(),
+  alpha: z.number().positive().lt(1),
+  confidenceLevel: z.number().positive().lt(1)
+});
+
+export const qcDecisionSchema = z.object({
+  wellId: z.string().trim().min(1),
+  decision: z.enum(["accepted", "excluded"]),
+  reason: z.string().trim().min(1),
+  operator: z.string().trim().min(1),
+  decidedAt: z.iso.datetime()
+});
+
+export const exportManifestSchema = z.object({
+  createdAt: z.iso.datetime(),
+  appVersion: z.string().trim().min(1),
+  rVersion: z.string().trim().min(1),
+  parameters: z.record(z.string(), z.unknown()),
+  files: z.array(z.object({
+    path: z.string().trim().min(1),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    bytes: z.number().int().nonnegative()
+  }))
+});
+
 export const groupSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
@@ -82,10 +129,14 @@ export const experimentInputJsonSchema = z.toJSONSchema(experimentInputSchema, {
 });
 
 export type AnalysisDesign = z.infer<typeof analysisDesignSchema>;
+export type AnalysisConfig = z.infer<typeof analysisConfigSchema>;
 export type CtWell = z.infer<typeof ctWellSchema>;
 export type ExperimentInput = z.infer<typeof experimentInputSchema>;
+export type QcDecision = z.infer<typeof qcDecisionSchema>;
+export type ExportManifest = z.infer<typeof exportManifestSchema>;
 
 export type QcCode =
+  | "TECHNICAL_REPLICATE_DISPERSION"
   | "SINGLE_TECHNICAL_REPLICATE"
   | "UNDETERMINED_WELL"
   | "EXCLUDED_WELL"
@@ -97,6 +148,8 @@ export interface QcFinding {
   sampleId?: string;
   gene?: string;
   wellId?: string;
+  dispersionCt?: number;
+  acceptedTechnicalN?: number;
   message: string;
 }
 
@@ -136,7 +189,9 @@ export interface AnalysisResult {
 
 export type DesignIssueCode =
   | "MISSING_SUBJECT_ID"
+  | "UNMATCHED_SUBJECT"
   | "MISSING_FACTOR_LEVEL"
+  | "MISSING_FACTOR_COMBINATION"
   | "DUPLICATE_WELL_ID"
   | "UNKNOWN_GROUP";
 
@@ -187,6 +242,22 @@ export function validateExperimentDesign(input: ExperimentInput): DesignIssue[] 
         });
       }
     });
+    if (input.design === "paired_two_group" && input.wells.every((well) => well.subjectId)) {
+      const expectedGroups = new Set(input.groups.map((group) => group.id));
+      const subjectIds = unique(input.wells.map((well) => well.subjectId as string));
+      for (const subjectId of subjectIds) {
+        const observed = new Set(
+          input.wells.filter((well) => well.subjectId === subjectId).map((well) => well.groupId)
+        );
+        if ([...expectedGroups].some((groupId) => !observed.has(groupId))) {
+          issues.push({
+            code: "UNMATCHED_SUBJECT",
+            path: "wells.subjectId",
+            message: `Subject ${subjectId} is missing one or more paired groups.`
+          });
+        }
+      }
+    }
   }
 
   if (input.design === "two_way") {
@@ -199,6 +270,22 @@ export function validateExperimentDesign(input: ExperimentInput): DesignIssue[] 
         });
       }
     });
+    if (input.wells.every((well) => well.factorA && well.factorB)) {
+      const factorA = unique(input.wells.map((well) => well.factorA as string));
+      const factorB = unique(input.wells.map((well) => well.factorB as string));
+      const observed = new Set(input.wells.map((well) => `${well.factorA}\u0000${well.factorB}`));
+      for (const levelA of factorA) {
+        for (const levelB of factorB) {
+          if (!observed.has(`${levelA}\u0000${levelB}`)) {
+            issues.push({
+              code: "MISSING_FACTOR_COMBINATION",
+              path: "wells.factorA/factorB",
+              message: `Two-way design is missing combination ${levelA} × ${levelB}.`
+            });
+          }
+        }
+      }
+    }
   }
 
   return issues;
@@ -270,6 +357,10 @@ function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function valueRange(values: number[]): number {
+  return Math.max(...values) - Math.min(...values);
+}
+
 function acceptedValues(wells: CtWell[]): number[] {
   return wells
     .filter((well) => well.status === "accepted" && well.ct !== null)
@@ -337,6 +428,18 @@ export function analyzeDeltaDeltaCt(rawInput: ExperimentInput): AnalysisResult {
     if (referenceValues.length === 0) {
       throw new Error(`${sampleId} has no accepted reference Ct`);
     }
+    if (referenceValues.length > 1) {
+      const dispersionCt = valueRange(referenceValues);
+      qc.push({
+        code: "TECHNICAL_REPLICATE_DISPERSION",
+        severity: "info",
+        sampleId,
+        gene: input.referenceGene,
+        dispersionCt,
+        acceptedTechnicalN: referenceValues.length,
+        message: `${sampleId}/${input.referenceGene} technical Ct range is ${dispersionCt.toFixed(3)}; no automatic exclusion was applied`
+      });
+    }
 
     for (const targetGene of input.targetGenes) {
       const targetWells = sampleWells.filter(
@@ -345,6 +448,19 @@ export function analyzeDeltaDeltaCt(rawInput: ExperimentInput): AnalysisResult {
       const targetValues = acceptedValues(targetWells);
       if (targetValues.length === 0) {
         throw new Error(`${sampleId} has no accepted Ct for ${targetGene}`);
+      }
+
+      if (targetValues.length > 1) {
+        const dispersionCt = valueRange(targetValues);
+        qc.push({
+          code: "TECHNICAL_REPLICATE_DISPERSION",
+          severity: "info",
+          sampleId,
+          gene: targetGene,
+          dispersionCt,
+          acceptedTechnicalN: targetValues.length,
+          message: `${sampleId}/${targetGene} technical Ct range is ${dispersionCt.toFixed(3)}; no automatic exclusion was applied`
+        });
       }
 
       if (targetValues.length === 1) {

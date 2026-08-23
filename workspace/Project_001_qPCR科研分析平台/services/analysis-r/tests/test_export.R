@@ -102,7 +102,8 @@ if (!any(grepl("'=HYPERLINK", safe_csv, fixed = TRUE))) stop("CSV formula inject
 raw_json <- jsonlite::read_json(file.path(bundle$directory, "raw_input.json"), simplifyVector = TRUE)
 if (!identical(raw_json$groupId[1], "=HYPERLINK(\"https://example.test\")")) stop("Raw JSON must preserve original input")
 manifest <- jsonlite::read_json(file.path(bundle$directory, "manifest.json"), simplifyVector = TRUE)
-if (!all(c("file", "bytes", "md5") %in% names(manifest$files))) stop("Manifest is missing file integrity fields")
+if (!all(c("path", "bytes", "sha256") %in% names(manifest$files))) stop("Manifest is missing file integrity fields")
+if (!all(grepl("^[a-f0-9]{64}$", manifest$files$sha256))) stop("Manifest SHA-256 values are invalid")
+if (!all(c("appVersion", "rVersion", "parameters") %in% names(manifest))) stop("Manifest is missing reproducibility metadata")
 
 cat("export tests passed\n")
-
