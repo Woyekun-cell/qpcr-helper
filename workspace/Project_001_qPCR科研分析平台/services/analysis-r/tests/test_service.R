@@ -4,6 +4,8 @@ setwd(service_root)
 
 source(file.path("R", "statistics.R"))
 source(file.path("R", "service.R"))
+source(file.path("R", "figures.R"))
+source(file.path("R", "export.R"))
 
 expect_equal <- function(actual, expected, tolerance = 1e-10) {
   if (!isTRUE(all.equal(actual, expected, tolerance = tolerance, check.attributes = FALSE))) {
@@ -64,5 +66,33 @@ message <- tryCatch({
 if (!identical(message, "Unknown calibrator group: missing")) {
   stop(sprintf("Unexpected validation error: %s", message))
 }
+
+preview <- run_preview_payload(list(
+  samples = samples,
+  config = payload$config,
+  figure = list(plotType = "dot", widthMm = 90, heightMm = 70),
+  title = "GENE1"
+))
+if (!identical(preview$status, "succeeded")) stop("Preview helper did not succeed")
+if (!grepl("<svg", preview$svg, fixed = TRUE)) stop("Preview helper did not return SVG")
+
+export_payload <- list(
+  projectName = "Service fixture",
+  rawWells = list(
+    list(wellId = "A1", sampleId = "c1", groupId = "control", gene = "GENE1", ct = 25)
+  ),
+  samples = samples,
+  qc = list(list(code = "SINGLE_REFERENCE_GENE", severity = "info", message = "Validate stability")),
+  analysis = list(
+    method = result$analyses[[1]]$method,
+    contrasts = split(result$contrasts, seq_len(nrow(result$contrasts))),
+    omnibus = list()
+  ),
+  config = payload$config,
+  figure = list(plotType = "dot", widthMm = 90, heightMm = 70, dpi = 300),
+  locale = "en"
+)
+service_export <- run_export_payload(export_payload, destination = tempfile("service-export-"))
+if (!file.exists(service_export$zip)) stop("Service export helper did not create a ZIP")
 
 cat("service tests passed\n")

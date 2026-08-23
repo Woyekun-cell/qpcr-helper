@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: qpcr-analysis-r
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: ALLOWED_ORIGINS
+        sync: false
+

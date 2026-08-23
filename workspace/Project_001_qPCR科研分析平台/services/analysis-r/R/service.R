@@ -89,3 +89,86 @@ run_analysis_payload <- function(payload) {
   )
 }
 
+payload_frame <- function(value) {
+  if (is.null(value) || length(value) == 0) return(data.frame())
+  if (is.data.frame(value)) return(value)
+  rows <- lapply(value, function(row) {
+    if (is.data.frame(row)) as.list(row[1, , drop = FALSE]) else row
+  })
+  rows_to_data_frame(rows)
+}
+
+derive_fold_change <- function(samples, calibrator_group) {
+  if ("foldChange" %in% names(samples)) return(samples)
+  samples$deltaDeltaCt <- NA_real_
+  samples$foldChange <- NA_real_
+  for (gene in unique(as.character(samples$targetGene))) {
+    gene_rows <- samples$targetGene == gene
+    calibrator_rows <- gene_rows & as.character(samples$groupId) == calibrator_group
+    if (!any(calibrator_rows)) stop(sprintf("Unknown calibrator group: %s", calibrator_group))
+    baseline <- mean(samples$deltaCt[calibrator_rows])
+    samples$deltaDeltaCt[gene_rows] <- samples$deltaCt[gene_rows] - baseline
+    samples$foldChange[gene_rows] <- 2^(-samples$deltaDeltaCt[gene_rows])
+  }
+  samples
+}
+
+run_preview_payload <- function(payload) {
+  if (!is.list(payload)) stop("request body must be a JSON object")
+  config <- payload$config
+  if (is.null(config) || !is.list(config)) stop("config is required")
+  samples <- derive_fold_change(
+    payload_frame(payload$samples),
+    required_config_value(config, "calibratorGroup")
+  )
+  figure <- if (is.null(payload$figure)) list() else payload$figure
+  plot_type <- if (is.null(figure$plotType)) "dot" else as.character(figure$plotType)
+  width_mm <- if (is.null(figure$widthMm)) 90 else as.numeric(figure$widthMm)
+  height_mm <- if (is.null(figure$heightMm)) 70 else as.numeric(figure$heightMm)
+  plot <- build_expression_plot(
+    samples,
+    plot_type = plot_type,
+    title = if (is.null(payload$title)) NULL else as.character(payload$title)
+  )
+  list(
+    status = "succeeded",
+    backend = "R/ggplot2",
+    plotType = plot_type,
+    widthMm = width_mm,
+    heightMm = height_mm,
+    svg = render_publication_svg(plot, width_mm = width_mm, height_mm = height_mm)
+  )
+}
+
+run_export_payload <- function(payload, destination = tempfile("qpcr-export-")) {
+  if (!is.list(payload)) stop("request body must be a JSON object")
+  config <- payload$config
+  if (is.null(config) || !is.list(config)) stop("config is required")
+  calibrator_group <- required_config_value(config, "calibratorGroup")
+  raw_wells <- payload_frame(payload$rawWells)
+  samples <- derive_fold_change(payload_frame(payload$samples), calibrator_group)
+  if (!"biologicalReplicateId" %in% names(samples)) {
+    samples$biologicalReplicateId <- samples$sampleId
+  }
+  qc <- payload_frame(payload$qc)
+  analysis <- payload$analysis
+  if (is.null(analysis) || !is.list(analysis)) stop("analysis is required")
+  analysis$contrasts <- payload_frame(analysis$contrasts)
+  analysis$omnibus <- payload_frame(analysis$omnibus)
+  figure <- if (is.null(payload$figure)) list() else payload$figure
+  dir.create(destination, recursive = TRUE, showWarnings = FALSE)
+  create_research_export(
+    destination = destination,
+    project_name = if (is.null(payload$projectName)) "qPCR analysis" else as.character(payload$projectName),
+    raw_wells = raw_wells,
+    samples = samples,
+    qc = qc,
+    analysis = analysis,
+    config = config,
+    plot_type = if (is.null(figure$plotType)) "dot" else as.character(figure$plotType),
+    width_mm = if (is.null(figure$widthMm)) 90 else as.numeric(figure$widthMm),
+    height_mm = if (is.null(figure$heightMm)) 70 else as.numeric(figure$heightMm),
+    dpi = if (is.null(figure$dpi)) 300 else as.numeric(figure$dpi),
+    locale = if (is.null(payload$locale)) "en" else as.character(payload$locale)
+  )
+}
