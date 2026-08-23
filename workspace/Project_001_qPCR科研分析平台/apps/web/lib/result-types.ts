@@ -1,6 +1,7 @@
 import type { AnalysisResult } from "@qpcr/contracts";
 
 export interface RContrast {
+  target_gene?: string;
   contrast?: string;
   fold_change?: number;
   fold_change_ci_low?: number;
@@ -33,7 +34,9 @@ export interface PlatformAnalysisResult {
   };
   figure: {
     svg: string;
-    backend: "R/ggplot2";
+    backend: "R/ggplot2" | "R/ComplexHeatmap";
+    plotType?: string;
+    palette?: string;
     widthMm: number;
     heightMm: number;
   };

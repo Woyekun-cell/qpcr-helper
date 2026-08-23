@@ -95,10 +95,13 @@ create_research_export <- function(
   qc,
   analysis,
   config,
-  plot_type = "dot",
+  plot_type = "bar",
   width_mm = 90,
   height_mm = 70,
   dpi = 300,
+  palette_name = "nature-muted",
+  p_label_mode = "stars",
+  show_points = TRUE,
   locale = "en"
 ) {
   required_packages <- c("jsonlite", "openxlsx", "zip")
@@ -137,6 +140,12 @@ create_research_export <- function(
     row.names = FALSE,
     na = ""
   )
+  utils::write.csv(
+    sanitize_spreadsheet_frame(analysis$contrasts),
+    file.path(bundle_directory, "contrasts.csv"),
+    row.names = FALSE,
+    na = ""
+  )
 
   roundtrip_workbook <- openxlsx::createWorkbook()
   openxlsx::addWorksheet(roundtrip_workbook, "Ct_Data")
@@ -171,7 +180,15 @@ create_research_export <- function(
   )
 
   confidence_level <- if (is.null(config$confidenceLevel)) 0.95 else as.numeric(config$confidenceLevel)
-  plot <- build_expression_plot(samples, plot_type = plot_type, confidence_level = confidence_level)
+  plot <- build_expression_plot(
+    samples,
+    plot_type = plot_type,
+    confidence_level = confidence_level,
+    contrasts = analysis$contrasts,
+    palette_name = palette_name,
+    p_label_mode = p_label_mode,
+    show_points = show_points
+  )
   save_publication_figure(
     plot,
     file.path(bundle_directory, "figure"),
@@ -201,6 +218,9 @@ create_research_export <- function(
       widthMm = width_mm,
       heightMm = height_mm,
       dpi = dpi,
+      palette = palette_name,
+      pLabelMode = p_label_mode,
+      showPoints = show_points,
       backend = "R"
     )
   )
@@ -224,9 +244,12 @@ create_research_export <- function(
     "source(\"figure_functions.R\")",
     "samples <- read.csv(\"clean_samples.csv\", stringsAsFactors = FALSE)",
     sprintf(
-      "plot <- build_expression_plot(samples, plot_type = \"%s\", confidence_level = %s)",
+      "plot <- build_expression_plot(samples, plot_type = \"%s\", confidence_level = %s, contrasts = read.csv(\"contrasts.csv\", stringsAsFactors = FALSE), palette_name = \"%s\", p_label_mode = \"%s\", show_points = %s)",
       plot_type,
-      confidence_level
+      confidence_level,
+      palette_name,
+      p_label_mode,
+      if (show_points) "TRUE" else "FALSE"
     ),
     sprintf(
       "save_publication_figure(plot, \"figure-reproduced\", width_mm = %s, height_mm = %s, dpi = %s)",

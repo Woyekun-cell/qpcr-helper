@@ -16,14 +16,13 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  ChevronDown,
-  CircleAlert,
   Download,
   FileSpreadsheet,
   FolderOpen,
   FlaskConical,
   Languages,
   LockKeyhole,
+  Palette,
   Play,
   Save,
   ShieldCheck,
@@ -48,7 +47,9 @@ import { AccountAccess } from "./account-access";
 import { ProjectLibrary, type CloudProject } from "./project-library";
 
 type Locale = "zh-CN" | "en";
-type FigureType = "dot" | "box" | "violin" | "paired" | "time" | "heatmap";
+type FigureType = "bar" | "dot" | "box" | "violin" | "paired" | "time" | "heatmap";
+type FigurePalette = "nature-muted" | "prism" | "okabe-ito" | "tol-bright" | "cool" | "warm";
+type PLabelMode = "stars" | "exact" | "stars-exact" | "none";
 interface JobReference { id: string; token?: string; expiresAt?: number; exportRequest?: AnalysisRequest }
 
 const copy = {
@@ -82,8 +83,6 @@ const copy = {
     exportTitle: "完整科研包",
     export: "下载 ZIP 科研包",
     empty: "载入演示或导入 Ct 数据后开始。",
-    localNote: "游客数据长期保存在 IndexedDB；传入分析服务的任务数据与导出物 1 小时后过期。",
-    risk: "单内参可运行，但需依据 MIQE 2.0 独立验证其稳定性。",
     exactN: "n 仅计生物学重复，技术孔先汇总。",
     wells: "个孔",
     lang: "English"
@@ -118,8 +117,6 @@ const copy = {
     exportTitle: "Complete research package",
     export: "Download research ZIP",
     empty: "Load the demo or import Ct values to begin.",
-    localNote: "Guest projects persist in IndexedDB; transmitted job data and exports expire after one hour.",
-    risk: "A single reference gene can run, but its stability requires independent validation under MIQE 2.0.",
     exactN: "n counts biological replicates only; technical wells are aggregated first.",
     wells: "wells",
     lang: "中文"
@@ -150,12 +147,36 @@ function inferExperiment(wells: CtWell[], locale: Locale, current?: ExperimentIn
 
 function scientific(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return "—";
-  if (Math.abs(value) < 0.001) return value.toExponential(2);
-  return value.toPrecision(4);
+  if (value !== 0 && Math.abs(value) < 0.001) return value.toExponential(2);
+  return new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 }).format(value);
+}
+
+function biologicalNLabel(result: PlatformAnalysisResult): string {
+  const unique = new Map<string, number>();
+  for (const group of result.calculation.groups) {
+    unique.set(group.groupId, Math.max(unique.get(group.groupId) ?? 0, group.biologicalN));
+  }
+  return [...unique].map(([group, n]) => `${group} ${n}`).join(" · ");
 }
 
 function percentLabel(value: number | undefined): string {
   return `${Math.round((value ?? 0.95) * 100)}%`;
+}
+
+const paletteOptions: Array<{ value: FigurePalette; label: string; colors: string[] }> = [
+  { value: "nature-muted", label: "Nature muted", colors: ["#4F6B45", "#D98268", "#4C6F91"] },
+  { value: "prism", label: "Prism classic", colors: ["#3B75AF", "#E06B65", "#59A14F"] },
+  { value: "okabe-ito", label: "Okabe–Ito", colors: ["#0072B2", "#D55E00", "#009E73"] },
+  { value: "tol-bright", label: "Tol bright", colors: ["#4477AA", "#EE6677", "#228833"] },
+  { value: "cool", label: "Cool", colors: ["#2F5D8A", "#5A8BB5", "#63A7A3"] },
+  { value: "warm", label: "Warm", colors: ["#8C4A32", "#C96B4B", "#D99A4E"] }
+];
+
+function recommendedFigureType(experiment: ExperimentInput): FigureType {
+  if (experiment.design === "paired_two_group") return "paired";
+  if (experiment.design === "repeated_time") return "time";
+  if (experiment.targetGenes.length > 1) return "heatmap";
+  return "bar";
 }
 
 function methodOptions(design: AnalysisConfig["design"], contrastMode?: AnalysisConfig["contrastMode"]): Array<{ value: AnalysisConfig["method"]; label: string }> {
@@ -227,7 +248,12 @@ export function Workbench() {
   const [step, setStep] = useState(0);
   const [experiment, setExperiment] = useState<ExperimentInput | null>(null);
   const [config, setConfig] = useState<AnalysisConfig | null>(null);
-  const [figureType, setFigureType] = useState<FigureType>("dot");
+  const [figureType, setFigureType] = useState<FigureType>("bar");
+  const [figurePalette, setFigurePalette] = useState<FigurePalette>("nature-muted");
+  const [pLabelMode, setPLabelMode] = useState<PLabelMode>("stars");
+  const [showPoints, setShowPoints] = useState(true);
+  const [figureWidth, setFigureWidth] = useState<90 | 180>(90);
+  const [figureDpi, setFigureDpi] = useState<300 | 600>(300);
   const [qcDecisions, setQcDecisions] = useState<QcDecision[]>([]);
   const [paste, setPaste] = useState(starterText);
   const [message, setMessage] = useState("");
@@ -261,7 +287,7 @@ export function Workbench() {
     const example = exampleCatalog.find((item) => item.id === exampleId);
     setExperiment(demo);
     setConfig(defaultAnalysisConfig(demo));
-    setFigureType(example?.figureType ?? "dot");
+    setFigureType(example?.figureType ?? "bar");
     setResult(null);
     setJob(null);
     setQcDecisions([]);
@@ -272,7 +298,7 @@ export function Workbench() {
     const demo = createDemoExperiment(locale);
     setExperiment(demo);
     setConfig(defaultAnalysisConfig(demo));
-    setFigureType("dot");
+    setFigureType("bar");
     setResult(null);
     setJob(null);
     setQcDecisions([]);
@@ -289,6 +315,7 @@ export function Workbench() {
     const next = inferExperiment(wells, locale, experiment ?? undefined);
     setExperiment(next);
     setConfig(defaultAnalysisConfig(next));
+    setFigureType(recommendedFigureType(next));
     setQcDecisions(decisions);
     setResult(null);
     setJob(null);
@@ -350,7 +377,7 @@ export function Workbench() {
       id: experiment.projectId,
       name: experiment.name,
       updatedAt: Date.now(),
-      payload: { experiment, config, figureType, qcDecisions }
+      payload: { experiment, config, figureType, figurePalette, pLabelMode, showPoints, figureWidth, figureDpi, qcDecisions }
     });
     setMessage(locale === "zh-CN" ? "已保存到本浏览器。" : "Saved in this browser.");
   }
@@ -373,7 +400,7 @@ export function Workbench() {
   }
 
   function applyStoredProject(payload: unknown) {
-    const stored = payload as { experiment?: unknown; config?: unknown; figureType?: unknown; qcDecisions?: unknown; result?: unknown };
+    const stored = payload as { experiment?: unknown; config?: unknown; figureType?: unknown; figurePalette?: unknown; pLabelMode?: unknown; showPoints?: unknown; figureWidth?: unknown; figureDpi?: unknown; qcDecisions?: unknown; result?: unknown };
     const parsedExperiment = experimentInputSchema.safeParse(stored.experiment);
     const parsedConfig = analysisConfigSchema.safeParse(stored.config);
     const parsedDecisions = qcDecisionSchema.array().safeParse(stored.qcDecisions ?? []);
@@ -383,9 +410,14 @@ export function Workbench() {
     }
     setExperiment(parsedExperiment.data);
     setConfig(parsedConfig.data);
-    if (["dot", "box", "violin", "paired", "time", "heatmap"].includes(String(stored.figureType))) {
+    if (["bar", "dot", "box", "violin", "paired", "time", "heatmap"].includes(String(stored.figureType))) {
       setFigureType(stored.figureType as FigureType);
     }
+    if (["nature-muted", "prism", "okabe-ito", "tol-bright", "cool", "warm"].includes(String(stored.figurePalette))) setFigurePalette(stored.figurePalette as FigurePalette);
+    if (["stars", "exact", "stars-exact", "none"].includes(String(stored.pLabelMode))) setPLabelMode(stored.pLabelMode as PLabelMode);
+    if (typeof stored.showPoints === "boolean") setShowPoints(stored.showPoints);
+    if (stored.figureWidth === 90 || stored.figureWidth === 180) setFigureWidth(stored.figureWidth);
+    if (stored.figureDpi === 300 || stored.figureDpi === 600) setFigureDpi(stored.figureDpi);
     setResult(stored.result && typeof stored.result === "object" ? stored.result as PlatformAnalysisResult : null);
     setJob(null);
     setQcDecisions(parsedDecisions.data);
@@ -433,15 +465,18 @@ export function Workbench() {
     if (response.ok) setCloudProjects((projects) => projects.filter((item) => item.id !== project.id));
   }
 
-  async function runAnalysis() {
-    if (!experiment || !config) return;
+  async function runAnalysis(experimentOverride?: ExperimentInput, configOverride?: AnalysisConfig, destinationStep = 4, figureTypeOverride?: FigureType) {
+    const activeExperiment = experimentOverride ?? experiment;
+    const activeConfig = configOverride ?? config;
+    if (!activeExperiment || !activeConfig) return;
+    const activeFigureType = figureTypeOverride ?? figureType;
     setBusy(true);
     setMessage("");
     try {
       const analysisRequest: AnalysisRequest = {
-        experiment,
-        config,
-        figure: { plotType: figureType, widthMm: 90, heightMm: 70, dpi: 300 },
+        experiment: activeExperiment,
+        config: activeConfig,
+        figure: { plotType: activeFigureType, widthMm: figureWidth, heightMm: figureWidth === 180 ? 105 : 70, dpi: figureDpi, palette: figurePalette, pLabelMode, showPoints },
         qcDecisions
       };
       const response = await fetch("/api/analysis-jobs", {
@@ -459,15 +494,29 @@ export function Workbench() {
         ...(payload.expiresAt ? { expiresAt: payload.expiresAt } : {})
       });
       await guestProjects.appendVersion({
-        id: experiment.projectId,
-        name: experiment.name,
-        payload: { experiment, config, figureType, qcDecisions, result: completedResult }
+        id: activeExperiment.projectId,
+        name: activeExperiment.name,
+        payload: { experiment: activeExperiment, config: activeConfig, figureType: activeFigureType, figurePalette, pLabelMode, showPoints, figureWidth, figureDpi, qcDecisions, result: completedResult }
       });
-      setStep(4);
+      setStep(destinationStep);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Analysis failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function analyzePastedData() {
+    try {
+      const nextExperiment = inferExperiment(parseCtText(paste), locale, experiment ?? undefined);
+      const nextConfig = defaultAnalysisConfig(nextExperiment);
+      const nextFigureType = recommendedFigureType(nextExperiment);
+      setExperiment(nextExperiment);
+      setConfig(nextConfig);
+      setFigureType(nextFigureType);
+      await runAnalysis(nextExperiment, nextConfig, 4, nextFigureType);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Import failed");
     }
   }
 
@@ -536,12 +585,23 @@ export function Workbench() {
     } finally { setBusy(false); }
   }
 
-  const contrast = result?.statistics?.contrasts?.[0];
+  const contrasts = result?.statistics?.contrasts ?? [];
+  const contrast = contrasts.length === 1 ? contrasts[0] : undefined;
   const omnibusRows = collectOmnibusRows(result);
   const fittedMethod = result ? Object.values(result.statistics.analyses)[0]?.method : undefined;
   const diagnostic = result ? Object.values(result.statistics.analyses)[0]?.diagnostics : undefined;
   const svg = result?.figure?.svg as string | undefined;
   const svgUrl = svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : "";
+  const adjustedPValues = contrasts.map((item) => item.p_adjusted_family ?? item.p_adjusted).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const availableFigureTypes: Array<{ value: FigureType; label: string }> = [
+    { value: "bar", label: locale === "zh-CN" ? "柱 + 点" : "Bar + points" },
+    { value: "dot", label: locale === "zh-CN" ? "散点" : "Dot" },
+    { value: "box", label: locale === "zh-CN" ? "箱线" : "Box" },
+    { value: "violin", label: locale === "zh-CN" ? "小提琴" : "Violin" },
+    ...(experiment?.design === "paired_two_group" ? [{ value: "paired" as const, label: locale === "zh-CN" ? "配对" : "Paired" }] : []),
+    ...(experiment?.design === "repeated_time" ? [{ value: "time" as const, label: locale === "zh-CN" ? "时间曲线" : "Time" }] : []),
+    ...((experiment?.targetGenes.length ?? 0) > 1 ? [{ value: "heatmap" as const, label: locale === "zh-CN" ? "热图" : "Heatmap" }] : [])
+  ];
 
   return (
     <main className="app-shell">
@@ -565,7 +625,6 @@ export function Workbench() {
               <button onClick={() => setStep(index)}><span>{index < step ? <Check size={13} /> : String(index + 1).padStart(2, "0")}</span>{label}</button>
             </li>
           ))}</ol>
-          <div className="rail-note"><ShieldCheck size={17} /><p>{t.localNote}</p></div>
         </aside>
 
         <section className="work-area">
@@ -581,6 +640,7 @@ export function Workbench() {
                 </select>
               </label>
               <button className="quiet-button" onClick={saveProject} disabled={!experiment}><Save size={15} />{t.save}</button>
+              <button className="primary-button one-click" onClick={() => void runAnalysis()} disabled={busy || !localCalculation}><Play size={15} />{locale === "zh-CN" ? "一键分析出图" : "Analyze & plot"}</button>
             </div>
           </div>
 
@@ -601,13 +661,12 @@ export function Workbench() {
           {step === 1 && <section className="panel">
             <div className="section-intro"><span className="section-number">02</span><div><h2>{t.importTitle}</h2><p>{t.importHint}</p></div></div>
             <textarea className="data-paste" value={paste} onChange={(event) => setPaste(event.target.value)} spellCheck={false} />
-            <div className="inline-actions"><button className="primary-button" onClick={parsePaste}><FileSpreadsheet size={16} />{t.parse}</button><button className="quiet-button" onClick={() => fileRef.current?.click()}><Upload size={16} />CSV / XLSX</button><input ref={fileRef} hidden type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></div>
+            <div className="inline-actions"><button className="quiet-button" onClick={parsePaste}><FileSpreadsheet size={16} />{t.parse}</button><button className="quiet-button" onClick={() => fileRef.current?.click()}><Upload size={16} />CSV / XLSX</button><button className="primary-button" onClick={() => void analyzePastedData()} disabled={busy}><Play size={16} />{locale === "zh-CN" ? "一键分析并出图" : "Analyze & plot"}</button><input ref={fileRef} hidden type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></div>
             {experiment && <DataTable wells={experiment.wells} onToggle={updateWell} locale={locale} />}
           </section>}
 
           {step === 2 && <section className="panel">
             <div className="section-intro"><span className="section-number">03</span><div><h2>{t.qcTitle}</h2><p>{t.exactN}</p></div></div>
-            <div className="notice warning"><CircleAlert size={18} /><div><strong>MIQE 2.0</strong><p>{t.risk}</p></div></div>
             <div className="qc-list">{localCalculation?.qc.map((item, index) => <div className="qc-row" key={`${item.code}-${index}`}><span className={`severity ${item.severity}`}>{item.severity}</span><b>{item.code}</b><p>{item.message}</p></div>) ?? <p>{t.empty}</p>}</div>
           </section>}
 
@@ -616,24 +675,38 @@ export function Workbench() {
             {config ? <div className="recommendation">
               <div><span className="eyebrow">{config.method === "recommended" ? (locale === "zh-CN" ? "推荐" : "RECOMMENDED") : (locale === "zh-CN" ? "已选择" : "SELECTED")}</span><h3>{selectedMethodLabel(config)}</h3><p>{t.exactN}</p></div>
               <div className="field-grid compact"><label><span>{locale === "zh-CN" ? "统计方法" : "Statistical method"}</span><select value={config.method} onChange={(event) => setConfig({ ...config, method: event.target.value as AnalysisConfig["method"] })}>{methodOptions(config.design, config.contrastMode).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label><span>{locale === "zh-CN" ? "比较范围" : "Contrasts"}</span><select value={config.contrastMode} onChange={(event) => updateContrastMode(event.target.value as AnalysisConfig["contrastMode"])}><option value="selected">Selected</option><option value="control">Control</option><option value="all_pairs">All pairs</option></select></label><label><span>{locale === "zh-CN" ? "多重校正" : "Correction"}</span><select value={config.correction} onChange={(event) => updateCorrection(event.target.value as AnalysisConfig["correction"])}><option value="holm">Holm</option><option value="BH">BH-FDR</option><option value="none">None</option>{config.design === "one_way" && <><option value="dunnett">Dunnett</option><option value="tukey">Tukey</option><option value="games-howell">Games–Howell</option></>}</select></label><label><span>{locale === "zh-CN" ? "显著性水平 α" : "Significance α"}</span><select value={config.alpha} onChange={(event) => setConfig({ ...config, alpha: Number(event.target.value) })}><option value="0.01">0.01</option><option value="0.05">0.05</option><option value="0.1">0.10</option></select></label><label><span>{locale === "zh-CN" ? "置信水平" : "Confidence level"}</span><select value={config.confidenceLevel} onChange={(event) => setConfig({ ...config, confidenceLevel: Number(event.target.value) })}><option value="0.9">90%</option><option value="0.95">95%</option><option value="0.99">99%</option></select></label>{config.design === "one_way" && config.contrastMode === "selected" && <><label><span>Numerator</span><select value={config.selectedComparisons?.[0]?.numerator ?? ""} onChange={(event) => updateSelectedComparison("numerator", event.target.value)}>{experiment?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><label><span>Denominator</span><select value={config.selectedComparisons?.[0]?.denominator ?? ""} onChange={(event) => updateSelectedComparison("denominator", event.target.value)}>{experiment?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label></>}</div>
-              <button className="primary-button run-button" onClick={runAnalysis} disabled={busy || !localCalculation}><Play size={16} />{busy ? t.running : t.run}</button>
+              {config.design === "one_way" && <div className="posthoc-guide"><span><b>Tukey</b>{locale === "zh-CN" ? "全部两两 · 等方差 ANOVA" : "all pairs · equal-variance ANOVA"}</span><span><b>Games–Howell</b>{locale === "zh-CN" ? "全部两两 · 不等方差" : "all pairs · unequal variances"}</span><span><b>Dunnett</b>{locale === "zh-CN" ? "各处理组 vs 对照" : "each treatment vs control"}</span></div>}
+              <button className="primary-button run-button" onClick={() => void runAnalysis()} disabled={busy || !localCalculation}><Play size={16} />{busy ? t.running : t.run}</button>
             </div> : <EmptyState text={t.empty} onDemo={loadDemo} label={t.demo} />}
           </section>}
 
           {step === 4 && <section className="panel">
             <div className="section-intro"><span className="section-number">05</span><div><h2>{t.resultTitle}</h2><p>{locale === "zh-CN" ? `推断在 ΔCt 尺度完成，效应量与 ${percentLabel(config?.confidenceLevel)} CI 反变换为倍数。` : `Inference is performed on ΔCt; effects and ${percentLabel(config?.confidenceLevel)} CIs are back-transformed to fold change.`}</p></div></div>
-            {result ? <>{contrast ? <div className="metric-strip"><Metric label="Fold change" value={`${scientific(contrast.fold_change)}×`} accent /><Metric label={`${percentLabel(config?.confidenceLevel)} CI`} value={`${scientific(contrast.fold_change_ci_low)}–${scientific(contrast.fold_change_ci_high)}`} /><Metric label={`adjusted p · α ${config?.alpha ?? 0.05}`} value={scientific(contrast.p_adjusted_family)} /><Metric label="biological n" value={result.calculation.groups.map((group) => `${group.groupId} ${group.biologicalN}`).join(" · ")} /></div> : <div className="metric-strip"><Metric label={locale === "zh-CN" ? "拟合模型" : "Fitted model"} value={fittedMethod ?? "—"} accent /><Metric label={locale === "zh-CN" ? "模型项" : "Model terms"} value={String(omnibusRows.length)} /><Metric label="α" value={String(config?.alpha ?? 0.05)} /><Metric label={locale === "zh-CN" ? "独立样本" : "Independent units"} value={String(diagnostic?.minimum_group_n ?? "—")} /></div>}{diagnostic && <div className="diagnostic-note"><strong>{locale === "zh-CN" ? "模型诊断建议" : "Model diagnostic recommendation"}</strong><p>{localizedDiagnostic(diagnostic, locale)}</p><span>Shapiro p {scientific(diagnostic.residual_normality_p)} · Fligner p {scientific(diagnostic.variance_homogeneity_p)} · {locale === "zh-CN" ? "离群残差" : "outliers"} {diagnostic.standardized_residual_outlier_count ?? 0} · {locale === "zh-CN" ? "自动切换：否" : "auto-switch: no"}</span></div>}{omnibusRows.length > 0 && <OmnibusTable rows={omnibusRows} locale={locale} />}<ResultsTable samples={result.calculation.samples} /></> : <EmptyState text={t.empty} onDemo={loadDemo} label={t.demo} />}
+            {result ? <>{contrast ? <div className="metric-strip"><Metric label={contrast.target_gene ? `${contrast.target_gene} · fold change` : "Fold change"} value={`${scientific(contrast.fold_change)}×`} accent /><Metric label={`${percentLabel(config?.confidenceLevel)} CI`} value={`${scientific(contrast.fold_change_ci_low)}–${scientific(contrast.fold_change_ci_high)}`} /><Metric label={`adjusted p · α ${config?.alpha ?? 0.05}`} value={scientific(contrast.p_adjusted_family ?? contrast.p_adjusted)} /><Metric label="biological n" value={biologicalNLabel(result)} /></div> : <div className="metric-strip"><Metric label={locale === "zh-CN" ? "拟合方法" : "Fitted method"} value={fittedMethod ?? "—"} accent /><Metric label={locale === "zh-CN" ? "比较数量" : "Comparisons"} value={String(contrasts.length)} /><Metric label={locale === "zh-CN" ? "最小校正 p" : "Minimum adjusted p"} value={scientific(adjustedPValues.length ? Math.min(...adjustedPValues) : undefined)} /><Metric label="biological n" value={biologicalNLabel(result)} /></div>}{diagnostic && <div className="diagnostic-note"><strong>{locale === "zh-CN" ? "模型诊断" : "Model diagnostics"}</strong><p>{localizedDiagnostic(diagnostic, locale)}</p><span>Shapiro p {scientific(diagnostic.residual_normality_p)} · Fligner p {scientific(diagnostic.variance_homogeneity_p)} · {locale === "zh-CN" ? "离群残差" : "outliers"} {diagnostic.standardized_residual_outlier_count ?? 0}</span></div>}{omnibusRows.length > 0 && <OmnibusTable rows={omnibusRows} locale={locale} />}<ResultsTable samples={result.calculation.samples} /></> : <EmptyState text={t.empty} onDemo={loadDemo} label={t.demo} />}
           </section>}
 
           {step === 5 && <section className="panel figure-panel">
-            <div className="section-intro"><span className="section-number">06</span><div><h2>{t.figureTitle}</h2><p>90 mm · Helvetica · 6.5 pt · editable SVG/PDF</p></div></div>
-            <div className="figure-toolbar"><label><span>{locale === "zh-CN" ? "图形类型" : "Plot type"}</span><select value={figureType} onChange={(event) => setFigureType(event.target.value as FigureType)}><option value="dot">Dot + {percentLabel(config?.confidenceLevel)} CI</option><option value="box">Box + points</option><option value="violin">Violin + points</option>{experiment?.design === "paired_two_group" && <option value="paired">Paired</option>}{experiment?.design === "repeated_time" && <option value="time">Time course</option>}{(experiment?.targetGenes.length ?? 0) > 1 && <option value="heatmap">Heatmap</option>}</select><ChevronDown size={14} /></label><button className="quiet-button" onClick={runAnalysis} disabled={busy || !experiment}>{locale === "zh-CN" ? "按新参数生成版本" : "Generate new version"}</button></div>
-            {svgUrl ? <div className="figure-canvas"><Image src={svgUrl} width={640} height={500} unoptimized alt={locale === "zh-CN" ? "R 生成的相对表达量图" : "R-generated relative expression plot"} /></div> : <EmptyState text={locale === "zh-CN" ? "先运行分析以生成 R 科研图。" : "Run the analysis to generate an R figure."} onDemo={runAnalysis} label={t.run} />}
+            <div className="section-intro"><span className="section-number">06</span><div><h2>{t.figureTitle}</h2><p>{figureWidth} mm · Helvetica · 6.5 pt · {percentLabel(config?.confidenceLevel)} CI · editable SVG/PDF</p></div></div>
+            <div className="figure-studio">
+              <div className="figure-stage">
+                {svgUrl ? <div className="figure-canvas"><Image src={svgUrl} width={900} height={620} unoptimized alt={locale === "zh-CN" ? "R 生成的相对表达量图" : "R-generated relative expression plot"} /></div> : <EmptyState text={locale === "zh-CN" ? "输入 Ct 后点击一键分析出图。" : "Enter Ct values, then analyze and plot."} onDemo={() => runAnalysis(undefined, undefined, 5)} label={t.run} />}
+                <div className="figure-meta"><span>{result?.figure.backend ?? "R"}</span><span>{figureWidth} × {figureWidth === 180 ? 105 : 70} mm</span><span>{figureDpi} dpi raster</span></div>
+              </div>
+              <aside className="figure-inspector">
+                <div className="inspector-heading"><Palette size={16} /><div><strong>{locale === "zh-CN" ? "图形设置" : "Figure settings"}</strong><span>{locale === "zh-CN" ? "修改后生成新版本" : "Changes create a new version"}</span></div></div>
+                <fieldset><legend>{locale === "zh-CN" ? "图形类型" : "Plot type"}</legend><div className="plot-tabs">{availableFigureTypes.map((item) => <button key={item.value} className={figureType === item.value ? "selected" : ""} onClick={() => setFigureType(item.value)}>{item.label}</button>)}</div></fieldset>
+                <fieldset><legend>{locale === "zh-CN" ? "配色" : "Palette"}</legend><div className="palette-grid">{paletteOptions.map((item) => <button key={item.value} title={item.label} aria-label={item.label} className={figurePalette === item.value ? "selected" : ""} onClick={() => setFigurePalette(item.value)}><span>{item.colors.map((color) => <i key={color} style={{ background: color }} />)}</span><small>{item.label}</small></button>)}</div></fieldset>
+                <div className="inspector-grid"><label><span>{locale === "zh-CN" ? "显著性标注" : "P-value label"}</span><select value={pLabelMode} onChange={(event) => setPLabelMode(event.target.value as PLabelMode)}><option value="stars">* / ** / ***</option><option value="stars-exact">Stars + exact p</option><option value="exact">Exact adjusted p</option><option value="none">None</option></select></label><label><span>{locale === "zh-CN" ? "投稿宽度" : "Width"}</span><select value={figureWidth} onChange={(event) => setFigureWidth(Number(event.target.value) as 90 | 180)}><option value="90">90 mm</option><option value="180">180 mm</option></select></label><label><span>{locale === "zh-CN" ? "位图分辨率" : "Raster DPI"}</span><select value={figureDpi} onChange={(event) => setFigureDpi(Number(event.target.value) as 300 | 600)}><option value="300">300 dpi</option><option value="600">600 dpi</option></select></label><label className="check-control"><input type="checkbox" checked={showPoints} onChange={(event) => setShowPoints(event.target.checked)} /><span>{locale === "zh-CN" ? "显示独立样本点" : "Show individual points"}</span></label></div>
+                <div className="star-key"><span>ns</span><span>* &lt; 0.05</span><span>** &lt; 0.01</span><span>*** &lt; 0.001</span><span>**** &lt; 0.0001</span></div>
+                <button className="primary-button generate-figure" onClick={() => void runAnalysis(undefined, undefined, 5)} disabled={busy || !experiment}>{busy ? t.running : locale === "zh-CN" ? "生成投稿图" : "Generate figure"}</button>
+              </aside>
+            </div>
           </section>}
 
           {step === 6 && <section className="panel">
             <div className="section-intro"><span className="section-number">07</span><div><h2>{t.exportTitle}</h2><p>{locale === "zh-CN" ? "原始/清洗数据、QC、计算链、统计、四种图形格式、R 脚本、sessionInfo、图注、Methods 与校验清单。" : "Raw/clean data, QC, calculations, statistics, four figure formats, R script, sessionInfo, legend, Methods and checksums."}</p></div></div>
-            <div className="export-box"><Download size={26} /><div><h3>qpcr-helper-research-package.zip</h3><p>{job?.expiresAt ? `${locale === "zh-CN" ? "游客下载有效至" : "Guest download expires"} ${new Date(job.expiresAt).toLocaleString(locale)}` : locale === "zh-CN" ? "登录项目由私有存储保留。" : "Signed-in artifacts use private storage."}</p></div><button className="primary-button" onClick={downloadExport} disabled={!job || busy}>{busy ? t.running : t.export}</button></div>
+            <div className="export-box"><Download size={26} /><div><h3>qpcr-helper-research-package.zip</h3><p>{job?.expiresAt ? `${locale === "zh-CN" ? "临时下载有效至" : "Temporary download expires"} ${new Date(job.expiresAt).toLocaleString(locale)}` : locale === "zh-CN" ? "项目与产物仅当前账户可访问。" : "Projects and artifacts are private to this account."}</p></div><button className="primary-button" onClick={downloadExport} disabled={!job || busy}>{busy ? t.running : t.export}</button></div>
+            <p className="privacy-footnote"><ShieldCheck size={13} />{locale === "zh-CN" ? "游客项目保存在本浏览器；上传任务与导出物 1 小时后过期。" : "Guest projects stay in this browser; uploaded jobs and exports expire after one hour."}</p>
           </section>}
 
           {message && <div className="status-message" role="status">{message}</div>}

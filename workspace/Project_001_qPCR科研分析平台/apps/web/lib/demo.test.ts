@@ -21,10 +21,10 @@ describe("built-in qPCR Helper examples", () => {
       "multi_gene"
     ]);
     expect(exampleCatalog.map((example) => example.figureType)).toEqual([
-      "dot",
+      "bar",
       "paired",
-      "violin",
-      "dot",
+      "bar",
+      "bar",
       "time",
       "heatmap"
     ]);

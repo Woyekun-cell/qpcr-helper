@@ -9,10 +9,13 @@ import {
 import { z } from "zod";
 
 export const figureConfigSchema = z.object({
-  plotType: z.enum(["dot", "box", "violin", "paired", "time", "heatmap"]),
+  plotType: z.enum(["bar", "dot", "box", "violin", "paired", "time", "heatmap"]),
   widthMm: z.union([z.literal(90), z.literal(180)]),
   heightMm: z.number().min(45).max(240),
-  dpi: z.union([z.literal(300), z.literal(600)])
+  dpi: z.union([z.literal(300), z.literal(600)]),
+  palette: z.enum(["nature-muted", "prism", "okabe-ito", "tol-bright", "cool", "warm"]).default("nature-muted"),
+  pLabelMode: z.enum(["stars", "exact", "stars-exact", "none"]).default("stars"),
+  showPoints: z.boolean().default(true)
 });
 
 export const analysisRequestSchema = z.object({
@@ -68,7 +71,7 @@ export const analysisRequestSchema = z.object({
   }
 });
 
-export type AnalysisRequest = z.infer<typeof analysisRequestSchema>;
+export type AnalysisRequest = z.input<typeof analysisRequestSchema>;
 
 export function prepareAnalysis(request: AnalysisRequest) {
   const parsed = analysisRequestSchema.parse(request);
@@ -95,7 +98,7 @@ export function prepareAnalysis(request: AnalysisRequest) {
         confidenceLevel: parsed.config.confidenceLevel
       },
       figure: parsed.figure,
-      title: parsed.experiment.targetGenes.join(", ")
+      title: null
     }
   };
 }

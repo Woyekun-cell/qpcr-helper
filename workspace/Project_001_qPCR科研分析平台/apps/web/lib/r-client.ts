@@ -31,12 +31,14 @@ async function post(path: string, payload: unknown): Promise<Response> {
 }
 
 export async function runRAnalysis(statisticsPayload: unknown, previewPayload: unknown) {
-  const [statisticsResponse, previewResponse] = await Promise.all([
-    post("/v1/analyze", statisticsPayload),
-    post("/v1/preview", previewPayload)
-  ]);
+  const statisticsResponse = await post("/v1/analyze", statisticsPayload);
+  const statistics = await statisticsResponse.json();
+  const previewResponse = await post("/v1/preview", {
+    ...(previewPayload as Record<string, unknown>),
+    analysis: statistics
+  });
   return {
-    statistics: await statisticsResponse.json(),
+    statistics,
     figure: await previewResponse.json()
   };
 }

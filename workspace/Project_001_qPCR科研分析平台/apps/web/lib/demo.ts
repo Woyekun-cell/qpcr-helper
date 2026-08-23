@@ -10,7 +10,7 @@ export type ExampleId =
   | "time_course"
   | "multi_gene";
 
-export type ExampleFigureType = "dot" | "violin" | "paired" | "time" | "heatmap";
+export type ExampleFigureType = "bar" | "dot" | "violin" | "paired" | "time" | "heatmap";
 
 interface LocalizedText {
   "zh-CN": string;
@@ -27,7 +27,7 @@ export interface ExampleCatalogItem {
 export const exampleCatalog: readonly ExampleCatalogItem[] = [
   {
     id: "independent_eight_fold",
-    figureType: "dot",
+    figureType: "bar",
     label: { "zh-CN": "独立两组 · 8 倍表达", en: "Independent groups · 8-fold" },
     description: { "zh-CN": "Welch t 检验；已知 2^-ΔΔCt = 8。", en: "Welch t test; known 2^-ΔΔCt = 8." }
   },
@@ -39,13 +39,13 @@ export const exampleCatalog: readonly ExampleCatalogItem[] = [
   },
   {
     id: "dose_response",
-    figureType: "violin",
+    figureType: "bar",
     label: { "zh-CN": "单因素 · 剂量反应", en: "One-way · dose response" },
     description: { "zh-CN": "对照、低剂量和高剂量多重比较。", en: "Control, low-dose and high-dose comparisons." }
   },
   {
     id: "factorial_interaction",
-    figureType: "dot",
+    figureType: "bar",
     label: { "zh-CN": "两因素 · 处理×时间", en: "Two-way · treatment × time" },
     description: { "zh-CN": "完整析因组合，演示主效应和交互。", en: "Complete factorial cells for main effects and interaction." }
   },

@@ -1,12 +1,17 @@
-qpcr_palette <- c(
-  "#536B3F",
-  "#D78368",
-  "#405A78",
-  "#4B8D88",
-  "#7E6A9C",
-  "#B88A3B",
-  "#6B6B6B"
+qpcr_palettes <- list(
+  `nature-muted` = c("#4F6B45", "#D98268", "#4C6F91", "#7A6B98", "#B58B43", "#4D8C88", "#777777"),
+  prism = c("#3B75AF", "#E06B65", "#59A14F", "#F0A43A", "#8B6BB1", "#4FA3A5", "#9A6A4F"),
+  `okabe-ito` = c("#0072B2", "#D55E00", "#009E73", "#E69F00", "#CC79A7", "#56B4E9", "#000000"),
+  `tol-bright` = c("#4477AA", "#EE6677", "#228833", "#CCBB44", "#AA3377", "#66CCEE", "#BBBBBB"),
+  cool = c("#2F5D8A", "#5A8BB5", "#63A7A3", "#8CB9A8", "#8073AC", "#B2ABD2", "#6B7280"),
+  warm = c("#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55")
 )
+
+resolve_palette <- function(palette_name, groups) {
+  palette <- qpcr_palettes[[palette_name]]
+  if (is.null(palette)) stop(sprintf("Unknown figure palette: %s", palette_name))
+  stats::setNames(rep(palette, length.out = length(groups)), groups)
+}
 
 theme_qpcr_nature <- function(base_size = 6.5, base_family = "Helvetica") {
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Figures require ggplot2")
@@ -81,45 +86,93 @@ group_interval <- function(samples, group_columns, confidence_level = 0.95) {
   result
 }
 
-group_colors <- function(samples) {
+group_colors <- function(samples, palette_name = "nature-muted") {
   groups <- if (is.factor(samples$groupId)) levels(droplevels(samples$groupId)) else unique(as.character(samples$groupId))
-  stats::setNames(rep(qpcr_palette, length.out = length(groups)), groups)
+  resolve_palette(palette_name, groups)
+}
+
+significance_label <- function(p_value, mode = "stars") {
+  if (!is.finite(p_value) || identical(mode, "none")) return(NA_character_)
+  stars <- if (p_value < 0.0001) "****" else if (p_value < 0.001) "***" else if (p_value < 0.01) "**" else if (p_value < 0.05) "*" else "ns"
+  exact <- if (p_value < 0.0001) sprintf("p = %.2e", p_value) else sprintf("p = %.4f", p_value)
+  if (identical(mode, "exact")) exact else if (identical(mode, "stars-exact")) paste0(stars, "  ", exact) else stars
+}
+
+significance_annotations <- function(samples, contrasts, mode = "stars") {
+  if (is.null(contrasts) || !is.data.frame(contrasts) || nrow(contrasts) == 0 || identical(mode, "none")) {
+    return(data.frame())
+  }
+  p_column <- if ("p_adjusted_family" %in% names(contrasts)) "p_adjusted_family" else if ("p_adjusted" %in% names(contrasts)) "p_adjusted" else "p_value"
+  pieces <- strsplit(as.character(contrasts$contrast), " - ", fixed = TRUE)
+  valid <- lengths(pieces) == 2
+  if (!any(valid)) return(data.frame())
+  annotations <- contrasts[valid, , drop = FALSE]
+  pieces <- pieces[valid]
+  annotations$group1 <- vapply(pieces, `[[`, character(1), 2)
+  annotations$group2 <- vapply(pieces, `[[`, character(1), 1)
+  group_levels <- if (is.factor(samples$groupId)) levels(samples$groupId) else unique(as.character(samples$groupId))
+  annotations$x1 <- match(annotations$group1, group_levels)
+  annotations$x2 <- match(annotations$group2, group_levels)
+  annotations$xmid <- (annotations$x1 + annotations$x2) / 2
+  annotations$targetGene <- if ("target_gene" %in% names(annotations)) as.character(annotations$target_gene) else unique(as.character(samples$targetGene))[1]
+  annotations$label <- vapply(as.numeric(annotations[[p_column]]), significance_label, character(1), mode = mode)
+  annotations <- annotations[!is.na(annotations$label), , drop = FALSE]
+  if (nrow(annotations) == 0) return(annotations)
+  annotations$rank <- ave(seq_len(nrow(annotations)), annotations$targetGene, FUN = seq_along)
+  gene_max <- tapply(samples$foldChange, samples$targetGene, max, na.rm = TRUE)
+  annotations$y <- vapply(seq_len(nrow(annotations)), function(index) {
+    gene_max[[annotations$targetGene[index]]] * (1.14 + 0.13 * annotations$rank[index])
+  }, numeric(1))
+  annotations$tick <- annotations$y * 0.965
+  annotations
 }
 
 build_expression_plot <- function(
   samples,
-  plot_type = c("dot", "box", "violin", "paired", "time", "heatmap"),
+  plot_type = c("bar", "dot", "box", "violin", "paired", "time", "heatmap"),
   title = NULL,
-  confidence_level = 0.95
+  confidence_level = 0.95,
+  contrasts = NULL,
+  palette_name = "nature-muted",
+  p_label_mode = "stars",
+  show_points = TRUE
 ) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Figures require ggplot2")
   plot_type <- match.arg(plot_type)
   validate_figure_samples(samples, plot_type)
   samples$groupId <- factor(samples$groupId, levels = unique(as.character(samples$groupId)))
-  colors <- group_colors(samples)
+  colors <- group_colors(samples, palette_name)
   title <- title %||% ""
   multiple_genes <- length(unique(as.character(samples$targetGene))) > 1
 
   if (plot_type == "heatmap") {
+    if (!requireNamespace("ComplexHeatmap", quietly = TRUE) || !requireNamespace("circlize", quietly = TRUE)) {
+      stop("Heatmaps require ComplexHeatmap and circlize")
+    }
     samples$log2_fold <- log2(samples$foldChange)
     aggregate_data <- stats::aggregate(log2_fold ~ targetGene + groupId, data = samples, FUN = mean)
+    genes <- unique(as.character(samples$targetGene))
+    groups <- levels(samples$groupId)
+    matrix_data <- matrix(NA_real_, nrow = length(genes), ncol = length(groups), dimnames = list(genes, groups))
+    for (index in seq_len(nrow(aggregate_data))) {
+      matrix_data[as.character(aggregate_data$targetGene[index]), as.character(aggregate_data$groupId[index])] <- aggregate_data$log2_fold[index]
+    }
+    limit <- max(abs(matrix_data), na.rm = TRUE)
+    if (!is.finite(limit) || limit == 0) limit <- 1
     return(
-      ggplot2::ggplot(aggregate_data, ggplot2::aes(x = groupId, y = targetGene, fill = log2_fold)) +
-        ggplot2::geom_tile(colour = "white", linewidth = 0.35) +
-        ggplot2::scale_fill_gradient2(
-          low = "#405A78",
-          mid = "#F7F4ED",
-          high = "#B65F4D",
-          midpoint = 0,
-          name = "log2 fold change"
-        ) +
-        ggplot2::labs(x = NULL, y = NULL, title = title) +
-        theme_qpcr_nature() +
-        ggplot2::theme(
-          legend.position = "right",
-          axis.line = ggplot2::element_blank(),
-          axis.ticks = ggplot2::element_blank()
-        )
+      ComplexHeatmap::Heatmap(
+        matrix_data,
+        name = "log2 FC",
+        col = circlize::colorRamp2(c(-limit, 0, limit), c("#3B648A", "#F7F7F4", "#B9584F")),
+        cluster_rows = nrow(matrix_data) >= 3,
+        cluster_columns = FALSE,
+        row_names_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 6.5),
+        column_names_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 6.5),
+        column_title = if (nzchar(title)) title else NULL,
+        column_title_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 7, fontface = "bold"),
+        heatmap_legend_param = list(title_gp = grid::gpar(fontsize = 6.5), labels_gp = grid::gpar(fontsize = 6)),
+        rect_gp = grid::gpar(col = "white", lwd = 0.5)
+      )
     )
   }
 
@@ -128,7 +181,7 @@ build_expression_plot <- function(
     summary_data <- group_interval(samples, summary_columns, confidence_level)
     time_plot <- ggplot2::ggplot(samples, ggplot2::aes(x = time, y = foldChange, colour = groupId)) +
         ggplot2::geom_line(ggplot2::aes(group = subjectId), linewidth = 0.3, alpha = 0.25) +
-        ggplot2::geom_point(size = 1.3, alpha = 0.7) +
+        ggplot2::geom_point(shape = 21, size = 1.1, stroke = 0.28, fill = "white", alpha = 0.85) +
         ggplot2::geom_line(
           data = summary_data,
           ggplot2::aes(x = time, y = center, group = groupId),
@@ -160,7 +213,17 @@ build_expression_plot <- function(
     integer(1)
   )
   group_labels <- stats::setNames(sprintf("%s\nn = %d", names(group_n), group_n), names(group_n))
-  plot <- ggplot2::ggplot(samples, ggplot2::aes(x = groupId, y = foldChange, colour = groupId))
+  plot <- ggplot2::ggplot(samples, ggplot2::aes(x = groupId, y = foldChange))
+  if (plot_type == "bar") {
+    plot <- plot + ggplot2::geom_col(
+      data = summary_data,
+      ggplot2::aes(x = groupId, y = center, fill = groupId),
+      width = 0.62,
+      colour = "#262824",
+      linewidth = 0.28,
+      alpha = 0.88
+    )
+  }
   if (plot_type == "box") {
     plot <- plot + ggplot2::geom_boxplot(width = 0.5, outlier.shape = NA, linewidth = 0.4, colour = "#575B54", fill = NA)
   }
@@ -175,12 +238,18 @@ build_expression_plot <- function(
       alpha = 0.8
     )
   }
+  if (show_points) {
+    plot <- plot + ggplot2::geom_point(
+      ggplot2::aes(fill = groupId),
+      position = ggplot2::position_jitter(width = 0.052, height = 0, seed = 104),
+      shape = 21,
+      colour = "#262824",
+      stroke = 0.28,
+      size = 1.18,
+      alpha = 0.92
+    )
+  }
   plot <- plot +
-    ggplot2::geom_point(
-      position = ggplot2::position_jitter(width = 0.075, height = 0, seed = 104),
-      size = 1.65,
-      alpha = 0.9
-    ) +
     ggplot2::geom_errorbar(
       data = summary_data,
       ggplot2::aes(x = groupId, ymin = ci_low, ymax = ci_high),
@@ -190,21 +259,35 @@ build_expression_plot <- function(
       colour = "#1E211D",
       na.rm = TRUE
     ) +
-    ggplot2::geom_point(
-      data = summary_data,
-      ggplot2::aes(x = groupId, y = center),
-      inherit.aes = FALSE,
-      shape = 95,
-      size = 4.5,
-      stroke = 0.6,
-      colour = "#1E211D"
-    ) +
-    ggplot2::scale_colour_manual(values = colors) +
+    ggplot2::scale_fill_manual(values = colors) +
     ggplot2::scale_x_discrete(labels = group_labels) +
-    ggplot2::scale_y_log10() +
     ggplot2::labs(x = NULL, y = "Relative expression (2^−ΔΔCt)", title = title) +
     theme_qpcr_nature()
-  if (multiple_genes) plot <- plot + ggplot2::facet_wrap(~targetGene)
+  if (plot_type != "bar") {
+    plot <- plot +
+      ggplot2::geom_point(
+        data = summary_data,
+        ggplot2::aes(x = groupId, y = center),
+        inherit.aes = FALSE,
+        shape = 95,
+        size = 3.8,
+        stroke = 0.5,
+        colour = "#1E211D"
+      ) +
+      ggplot2::scale_y_log10()
+  } else {
+    annotations <- significance_annotations(samples, contrasts, p_label_mode)
+    top_expansion <- if (nrow(annotations) > 0) 0.2 else 0.08
+    plot <- plot + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, top_expansion)))
+    if (nrow(annotations) > 0) {
+      plot <- plot +
+        ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x1, xend = x2, y = y, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
+        ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x1, xend = x1, y = tick, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
+        ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x2, xend = x2, y = tick, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
+        ggplot2::geom_text(data = annotations, ggplot2::aes(x = xmid, y = y, label = label), inherit.aes = FALSE, vjust = -0.35, family = "Helvetica", size = 2.2)
+    }
+  }
+  if (multiple_genes) plot <- plot + ggplot2::facet_wrap(~targetGene, scales = if (plot_type == "bar") "free_y" else "fixed")
   plot
 }
 
@@ -218,7 +301,9 @@ format_exact_p <- function(value) {
 }
 
 build_figure_legend <- function(samples, contrasts, method, correction, confidence_level = 0.95) {
-  group_n <- table(samples$groupId)
+  analysis_id <- if ("subjectId" %in% names(samples)) samples$subjectId else if ("biologicalReplicateId" %in% names(samples)) samples$biologicalReplicateId else samples$sampleId
+  independent_units <- unique(data.frame(groupId = as.character(samples$groupId), analysis_id = analysis_id, stringsAsFactors = FALSE))
+  group_n <- table(independent_units$groupId)
   n_text <- paste(sprintf("%s %d", names(group_n), as.integer(group_n)), collapse = ", ")
   comparison_text <- if (nrow(contrasts) > 0) {
     paste(
@@ -247,12 +332,20 @@ build_figure_legend <- function(samples, contrasts, method, correction, confiden
   )
 }
 
+draw_publication_plot <- function(plot) {
+  if (inherits(plot, "Heatmap") || inherits(plot, "HeatmapList")) {
+    ComplexHeatmap::draw(plot, heatmap_legend_side = "right")
+  } else {
+    print(plot)
+  }
+}
+
 render_publication_svg <- function(plot, width_mm = 90, height_mm = 70) {
   if (!requireNamespace("svglite", quietly = TRUE)) stop("SVG preview requires svglite")
   output <- tempfile("qpcr-preview-", fileext = ".svg")
   on.exit(unlink(output, force = TRUE), add = TRUE)
   svglite::svglite(output, width = width_mm / 25.4, height = height_mm / 25.4)
-  print(plot)
+  draw_publication_plot(plot)
   grDevices::dev.off()
   paste(readLines(output, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
 }
@@ -272,7 +365,7 @@ save_publication_figure <- function(plot, file_stem, width_mm = 90, height_mm = 
   height <- height_mm / 25.4
 
   svglite::svglite(paths$svg, width = width, height = height)
-  print(plot)
+  draw_publication_plot(plot)
   grDevices::dev.off()
 
   if (identical(Sys.info()[["sysname"]], "Darwin") && capabilities("aqua")) {
@@ -286,15 +379,15 @@ save_publication_figure <- function(plot, file_stem, width_mm = 90, height_mm = 
   } else {
     grDevices::cairo_pdf(paths$pdf, width = width, height = height, family = "Helvetica")
   }
-  print(plot)
+  draw_publication_plot(plot)
   grDevices::dev.off()
 
   ragg::agg_tiff(paths$tiff, width = width, height = height, units = "in", res = dpi, compression = "lzw")
-  print(plot)
+  draw_publication_plot(plot)
   grDevices::dev.off()
 
   ragg::agg_png(paths$png, width = width, height = height, units = "in", res = dpi)
-  print(plot)
+  draw_publication_plot(plot)
   grDevices::dev.off()
 
   paths

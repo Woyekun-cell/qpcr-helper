@@ -44,4 +44,19 @@ describe("analysis API preparation", () => {
       correction: "dunnett"
     });
   });
+
+  it("defaults publication figures to compact bar-plus-points styling", () => {
+    const experiment = createDemoExperiment("en");
+    const prepared = prepareAnalysis({
+      experiment,
+      config: defaultAnalysisConfig(experiment),
+      figure: { plotType: "bar", widthMm: 90, heightMm: 70, dpi: 300 }
+    });
+    expect(prepared.previewPayload.figure).toMatchObject({
+      plotType: "bar",
+      palette: "nature-muted",
+      pLabelMode: "stars",
+      showPoints: true
+    });
+  });
 });

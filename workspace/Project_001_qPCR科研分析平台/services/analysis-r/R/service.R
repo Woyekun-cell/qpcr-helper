@@ -147,19 +147,29 @@ run_preview_payload <- function(payload) {
     required_config_value(config, "calibratorGroup")
   )
   figure <- if (is.null(payload$figure)) list() else payload$figure
-  plot_type <- if (is.null(figure$plotType)) "dot" else as.character(figure$plotType)
+  plot_type <- if (is.null(figure$plotType)) "bar" else as.character(figure$plotType)
   width_mm <- if (is.null(figure$widthMm)) 90 else as.numeric(figure$widthMm)
   height_mm <- if (is.null(figure$heightMm)) 70 else as.numeric(figure$heightMm)
+  palette_name <- if (is.null(figure$palette)) "nature-muted" else as.character(figure$palette)
+  p_label_mode <- if (is.null(figure$pLabelMode)) "stars" else as.character(figure$pLabelMode)
+  show_points <- if (is.null(figure$showPoints)) TRUE else isTRUE(figure$showPoints)
+  analysis <- if (is.null(payload$analysis)) list() else payload$analysis
+  contrasts <- payload_frame(analysis$contrasts)
   plot <- build_expression_plot(
     samples,
     plot_type = plot_type,
     title = if (is.null(payload$title)) NULL else as.character(payload$title),
-    confidence_level = numeric_config_value(config, "confidenceLevel", 0.95)
+    confidence_level = numeric_config_value(config, "confidenceLevel", 0.95),
+    contrasts = contrasts,
+    palette_name = palette_name,
+    p_label_mode = p_label_mode,
+    show_points = show_points
   )
   list(
     status = "succeeded",
-    backend = "R/ggplot2",
+    backend = if (identical(plot_type, "heatmap")) "R/ComplexHeatmap" else "R/ggplot2",
     plotType = plot_type,
+    palette = palette_name,
     widthMm = width_mm,
     heightMm = height_mm,
     svg = render_publication_svg(plot, width_mm = width_mm, height_mm = height_mm)
@@ -192,10 +202,13 @@ run_export_payload <- function(payload, destination = tempfile("qpcr-export-")) 
     qc = qc,
     analysis = analysis,
     config = config,
-    plot_type = if (is.null(figure$plotType)) "dot" else as.character(figure$plotType),
+    plot_type = if (is.null(figure$plotType)) "bar" else as.character(figure$plotType),
     width_mm = if (is.null(figure$widthMm)) 90 else as.numeric(figure$widthMm),
     height_mm = if (is.null(figure$heightMm)) 70 else as.numeric(figure$heightMm),
     dpi = if (is.null(figure$dpi)) 300 else as.numeric(figure$dpi),
+    palette_name = if (is.null(figure$palette)) "nature-muted" else as.character(figure$palette),
+    p_label_mode = if (is.null(figure$pLabelMode)) "stars" else as.character(figure$pLabelMode),
+    show_points = if (is.null(figure$showPoints)) TRUE else isTRUE(figure$showPoints),
     locale = if (is.null(payload$locale)) "en" else as.character(payload$locale)
   )
 }

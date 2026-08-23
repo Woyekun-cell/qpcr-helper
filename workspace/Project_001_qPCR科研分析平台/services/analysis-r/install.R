@@ -19,3 +19,12 @@ missing <- packages[!vapply(packages, requireNamespace, logical(1), quietly = TR
 if (length(missing) > 0) {
   install.packages(missing, repos = "https://cloud.r-project.org", Ncpus = 2L)
 }
+
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager", repos = "https://cloud.r-project.org")
+}
+bioconductor_packages <- c("ComplexHeatmap")
+missing_bioconductor <- bioconductor_packages[!vapply(bioconductor_packages, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_bioconductor) > 0) {
+  BiocManager::install(missing_bioconductor, ask = FALSE, update = FALSE)
+}
