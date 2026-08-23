@@ -77,6 +77,10 @@ export const experimentInputSchema = z
     }
   });
 
+export const experimentInputJsonSchema = z.toJSONSchema(experimentInputSchema, {
+  target: "draft-2020-12"
+});
+
 export type AnalysisDesign = z.infer<typeof analysisDesignSchema>;
 export type CtWell = z.infer<typeof ctWellSchema>;
 export type ExperimentInput = z.infer<typeof experimentInputSchema>;
@@ -130,6 +134,138 @@ export interface AnalysisResult {
   qc: QcFinding[];
 }
 
+export type DesignIssueCode =
+  | "MISSING_SUBJECT_ID"
+  | "MISSING_FACTOR_LEVEL"
+  | "DUPLICATE_WELL_ID"
+  | "UNKNOWN_GROUP";
+
+export interface DesignIssue {
+  code: DesignIssueCode;
+  path: string;
+  message: string;
+}
+
+export function validateExperimentDesign(input: ExperimentInput): DesignIssue[] {
+  const issues: DesignIssue[] = [];
+  const wellCounts = new Map<string, number>();
+  for (const well of input.wells) {
+    wellCounts.set(well.wellId, (wellCounts.get(well.wellId) ?? 0) + 1);
+  }
+
+  const duplicateIds = new Set(
+    [...wellCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([wellId]) => wellId)
+  );
+  for (const wellId of duplicateIds) {
+    issues.push({
+      code: "DUPLICATE_WELL_ID",
+      path: "wells",
+      message: `Well ID ${wellId} is duplicated.`
+    });
+  }
+
+  const knownGroups = new Set(input.groups.map((group) => group.id));
+  input.wells.forEach((well, index) => {
+    if (!knownGroups.has(well.groupId)) {
+      issues.push({
+        code: "UNKNOWN_GROUP",
+        path: `wells[${index}].groupId`,
+        message: `Group ${well.groupId} is not defined.`
+      });
+    }
+  });
+
+  if (input.design === "paired_two_group" || input.design === "repeated_time") {
+    input.wells.forEach((well, index) => {
+      if (!well.subjectId) {
+        issues.push({
+          code: "MISSING_SUBJECT_ID",
+          path: `wells[${index}].subjectId`,
+          message: "Paired and repeated designs require subjectId on every well."
+        });
+      }
+    });
+  }
+
+  if (input.design === "two_way") {
+    input.wells.forEach((well, index) => {
+      if (!well.factorA || !well.factorB) {
+        issues.push({
+          code: "MISSING_FACTOR_LEVEL",
+          path: `wells[${index}].factorA/factorB`,
+          message: "Two-way designs require factorA and factorB on every well."
+        });
+      }
+    });
+  }
+
+  return issues;
+}
+
+type ImportedRow = Record<string, unknown>;
+
+function requiredText(row: ImportedRow, key: string, rowNumber: number): string {
+  const value = row[key];
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new Error(`row ${rowNumber} is missing ${key}`);
+  }
+  const text = String(value).trim();
+  if (!text) throw new Error(`row ${rowNumber} is missing ${key}`);
+  return text;
+}
+
+function optionalText(row: ImportedRow, key: string): string | undefined {
+  const value = row[key];
+  if (value === null || value === undefined) return undefined;
+  const text = String(value).trim();
+  return text || undefined;
+}
+
+export function normalizeImportedWells(rows: ImportedRow[]): CtWell[] {
+  const missingMarkers = new Set(["", "na", "n/a", "nd", "undetermined"]);
+  return rows.map((row, index) => {
+    const rowNumber = index + 1;
+    const rawCt = row.ct;
+    const ctText = rawCt === null || rawCt === undefined ? "" : String(rawCt).trim();
+    const isMissing = missingMarkers.has(ctText.toLowerCase());
+    const numericCt = isMissing ? null : Number(ctText);
+    if (numericCt !== null && !Number.isFinite(numericCt)) {
+      throw new Error(`row ${rowNumber} has invalid Ct "${ctText}"`);
+    }
+    const role = requiredText(row, "role", rowNumber).toLowerCase();
+    if (role !== "target" && role !== "reference") {
+      throw new Error(`row ${rowNumber} has invalid role "${role}"`);
+    }
+    const timeText = optionalText(row, "time");
+    const time = timeText === undefined ? undefined : Number(timeText);
+    if (time !== undefined && !Number.isFinite(time)) {
+      throw new Error(`row ${rowNumber} has invalid time "${timeText}"`);
+    }
+
+    return {
+      wellId: requiredText(row, "well_id", rowNumber),
+      sampleId: requiredText(row, "sample_id", rowNumber),
+      biologicalReplicateId: requiredText(row, "biological_replicate", rowNumber),
+      technicalReplicateId: requiredText(row, "technical_replicate", rowNumber),
+      groupId: requiredText(row, "group", rowNumber),
+      gene: requiredText(row, "gene", rowNumber),
+      geneRole: role,
+      ct: numericCt,
+      status: isMissing ? "undetermined" : "accepted",
+      ...(optionalText(row, "subject_id")
+        ? { subjectId: optionalText(row, "subject_id") }
+        : {}),
+      ...(optionalText(row, "factor_a") ? { factorA: optionalText(row, "factor_a") } : {}),
+      ...(optionalText(row, "factor_b") ? { factorB: optionalText(row, "factor_b") } : {}),
+      ...(time !== undefined ? { time } : {}),
+      ...(optionalText(row, "plate_id") ? { plateId: optionalText(row, "plate_id") } : {}),
+      ...(optionalText(row, "batch") ? { batch: optionalText(row, "batch") } : {})
+    };
+  });
+}
+
 function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
@@ -146,6 +282,10 @@ function unique<T>(values: T[]): T[] {
 
 export function analyzeDeltaDeltaCt(rawInput: ExperimentInput): AnalysisResult {
   const input = experimentInputSchema.parse(rawInput);
+  const designIssues = validateExperimentDesign(input);
+  if (designIssues.length > 0) {
+    throw new Error(designIssues.map((issue) => `${issue.path}: ${issue.message}`).join("\n"));
+  }
   const calibrator = input.groups.find((group) => group.isCalibrator);
   if (!calibrator) throw new Error("calibrator group is required");
 
@@ -292,4 +432,3 @@ export function analyzeDeltaDeltaCt(rawInput: ExperimentInput): AnalysisResult {
     qc
   };
 }
-
