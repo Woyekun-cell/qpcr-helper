@@ -10,7 +10,7 @@ import { z } from "zod";
 
 export const figureConfigSchema = z.object({
   plotType: z.enum(["bar", "dot", "box", "violin", "paired", "time", "heatmap"]),
-  widthMm: z.union([z.literal(90), z.literal(120), z.literal(150), z.literal(180)]),
+  widthMm: z.union([z.literal(60), z.literal(75), z.literal(90), z.literal(120), z.literal(150), z.literal(180)]),
   heightMm: z.union([z.literal(60), z.literal(70), z.literal(75), z.literal(90), z.literal(105), z.literal(120)]),
   dpi: z.union([z.literal(300), z.literal(600)]),
   palette: z.enum([
@@ -22,6 +22,7 @@ export const figureConfigSchema = z.object({
   ]).default("nature-muted"),
   pLabelMode: z.enum(["stars", "exact", "stars-exact", "none"]).default("stars"),
   showPoints: z.boolean().default(true),
+  pointShape: z.enum(["circle", "square", "triangle", "diamond"]).default("circle"),
   customColors: z.array(z.string().regex(/^#[0-9A-Fa-f]{6}$/)).min(2).max(8).optional()
 }).superRefine((value, context) => {
   if (value.palette === "custom" && !value.customColors) {

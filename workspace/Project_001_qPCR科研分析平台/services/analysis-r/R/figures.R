@@ -13,11 +13,11 @@ qpcr_palettes <- list(
   `macaron-pastel` = c("#8EC5E8", "#F3A6A0", "#9ED9B5", "#F3D58A", "#C6A8E0", "#91D5D2", "#F1B3CF"),
   `macaron-candy` = c("#69B7EB", "#FF8F86", "#76D39B", "#FFD36E", "#B995E4", "#65CECC", "#F38FB5"),
   `macaron-gelato` = c("#A7C7E7", "#F4B6A8", "#B7D7B0", "#F2D49B", "#C9B5D9", "#A6D5D2", "#E9B7C7"),
-  `gradient-blue-red` = c("#315B8A", "#F6F3EE", "#B64F4A", "#6E84A3", "#D98272"),
-  `gradient-purple-green` = c("#6B4C8A", "#F5F3ED", "#4D8B72", "#9A7CB3", "#7BB29D"),
-  `gradient-teal-coral` = c("#287D7B", "#F7F3EC", "#D66B5D", "#6AA9A5", "#E59B8D"),
-  `gradient-sunset` = c("#574B90", "#F6C98B", "#C84A5A", "#8B6DA8", "#E88A64"),
-  `gradient-ocean` = c("#173F5F", "#63B7AF", "#E6F4F1", "#2C7DA0", "#80CED7"),
+  `gradient-blue-red` = c("#315B8A", "#B64F4A"),
+  `gradient-purple-green` = c("#6B4C8A", "#4D8B72"),
+  `gradient-teal-coral` = c("#287D7B", "#D66B5D"),
+  `gradient-sunset` = c("#574B90", "#C84A5A"),
+  `gradient-ocean` = c("#173F5F", "#80CED7"),
   cool = c("#2F5D8A", "#5A8BB5", "#63A7A3", "#8CB9A8", "#8073AC", "#B2ABD2", "#6B7280"),
   warm = c("#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55")
 )
@@ -32,6 +32,12 @@ resolve_palette_values <- function(palette_name, custom_colors = NULL) {
 resolve_palette <- function(palette_name, groups, custom_colors = NULL) {
   palette <- resolve_palette_values(palette_name, custom_colors)
   stats::setNames(rep(palette, length.out = length(groups)), groups)
+}
+
+resolve_point_shape <- function(point_shape = "circle") {
+  shapes <- c(circle = 21, square = 22, diamond = 23, triangle = 24)
+  if (!point_shape %in% names(shapes)) stop(sprintf("Unknown point shape: %s", point_shape))
+  unname(shapes[[point_shape]])
 }
 
 theme_qpcr_nature <- function(base_size = 6.5, base_family = "Helvetica") {
@@ -129,8 +135,8 @@ significance_annotations <- function(samples, contrasts, mode = "stars") {
   if (!any(valid)) return(data.frame())
   annotations <- contrasts[valid, , drop = FALSE]
   pieces <- pieces[valid]
-  annotations$group1 <- vapply(pieces, `[[`, character(1), 2)
-  annotations$group2 <- vapply(pieces, `[[`, character(1), 1)
+  annotations$group1 <- vapply(pieces, function(groups) groups[[2]], character(1))
+  annotations$group2 <- vapply(pieces, function(groups) groups[[1]], character(1))
   group_levels <- if (is.factor(samples$groupId)) levels(samples$groupId) else unique(as.character(samples$groupId))
   annotations$x1 <- match(annotations$group1, group_levels)
   annotations$x2 <- match(annotations$group2, group_levels)
@@ -157,7 +163,8 @@ build_expression_plot <- function(
   palette_name = "nature-muted",
   p_label_mode = "stars",
   show_points = TRUE,
-  custom_colors = NULL
+  custom_colors = NULL,
+  point_shape = "circle"
 ) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Figures require ggplot2")
   plot_type <- match.arg(plot_type)
@@ -182,11 +189,7 @@ build_expression_plot <- function(
     }
     limit <- max(abs(matrix_data), na.rm = TRUE)
     if (!is.finite(limit) || limit == 0) limit <- 1
-    heat_colors <- if (startsWith(palette_name, "gradient-") && length(palette_values) >= 3) {
-      palette_values[1:3]
-    } else {
-      c(palette_values[1], "#F7F7F4", palette_values[2])
-    }
+    heat_colors <- c(palette_values[1], "#FFFFFF", palette_values[2])
     return(
       ComplexHeatmap::Heatmap(
         matrix_data,
@@ -194,14 +197,14 @@ build_expression_plot <- function(
         col = circlize::colorRamp2(c(-limit, 0, limit), heat_colors),
         cluster_rows = nrow(matrix_data) >= 3,
         cluster_columns = FALSE,
-        row_names_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 6.5),
+        row_names_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 6.5, fontface = "italic"),
         column_names_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 6.5),
         column_title = if (nzchar(title)) title else NULL,
         column_title_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 7, fontface = "bold"),
         heatmap_legend_param = list(title_gp = grid::gpar(fontsize = 6.5), labels_gp = grid::gpar(fontsize = 6)),
         rect_gp = grid::gpar(col = "black", lwd = 0.55),
-        width = grid::unit(ncol(matrix_data), "null"),
-        height = grid::unit(nrow(matrix_data), "null")
+        width = grid::unit(ncol(matrix_data) * 8, "mm"),
+        height = grid::unit(nrow(matrix_data) * 8, "mm")
       )
     )
   }
@@ -211,7 +214,7 @@ build_expression_plot <- function(
     summary_data <- group_interval(samples, summary_columns, confidence_level)
     time_plot <- ggplot2::ggplot(samples, ggplot2::aes(x = time, y = foldChange, colour = groupId)) +
         ggplot2::geom_line(ggplot2::aes(group = subjectId), linewidth = 0.3, alpha = 0.25) +
-        ggplot2::geom_point(shape = 21, size = 1.1, stroke = 0.28, fill = "white", alpha = 0.85) +
+        ggplot2::geom_point(shape = resolve_point_shape(point_shape), size = 1.35, stroke = 0.28, fill = "white", alpha = 0.85) +
         ggplot2::geom_line(
           data = summary_data,
           ggplot2::aes(x = time, y = center, group = groupId),
@@ -221,28 +224,21 @@ build_expression_plot <- function(
           data = summary_data,
           ggplot2::aes(x = time, ymin = ci_low, ymax = ci_high),
           width = 0.08,
-          linewidth = 0.35
+          linewidth = 0.3
         ) +
         ggplot2::scale_colour_manual(values = colors) +
         ggplot2::scale_y_log10() +
-        ggplot2::labs(x = "Time", y = "Relative expression (2^−ΔΔCt)", title = title) +
+        ggplot2::labs(x = "Time", y = "Relative expression", title = title) +
         theme_qpcr_nature() +
         ggplot2::theme(legend.position = "top")
-    if (multiple_genes) time_plot <- time_plot + ggplot2::facet_wrap(~targetGene)
+    if (multiple_genes) time_plot <- time_plot + ggplot2::facet_wrap(~targetGene) +
+      ggplot2::theme(strip.text = ggplot2::element_text(face = "italic"))
     return(time_plot)
   }
 
   summary_columns <- if (multiple_genes) c("targetGene", "groupId") else "groupId"
   summary_data <- group_interval(samples, summary_columns, confidence_level)
-  group_n <- vapply(
-    split(samples, samples$groupId),
-    function(piece) {
-      ids <- if ("subjectId" %in% names(piece)) piece$subjectId else if ("biologicalReplicateId" %in% names(piece)) piece$biologicalReplicateId else piece$sampleId
-      length(unique(ids))
-    },
-    integer(1)
-  )
-  group_labels <- stats::setNames(sprintf("%s\nn = %d", names(group_n), group_n), names(group_n))
+  group_labels <- stats::setNames(levels(samples$groupId), levels(samples$groupId))
   plot <- ggplot2::ggplot(samples, ggplot2::aes(x = groupId, y = foldChange))
   if (plot_type == "bar") {
     plot <- plot + ggplot2::geom_col(
@@ -272,10 +268,10 @@ build_expression_plot <- function(
     plot <- plot + ggplot2::geom_point(
       ggplot2::aes(fill = groupId),
       position = ggplot2::position_jitter(width = 0.052, height = 0, seed = 104),
-      shape = 21,
+      shape = resolve_point_shape(point_shape),
       colour = "#262824",
       stroke = 0.28,
-      size = 1.18,
+      size = 1.35,
       alpha = 0.92
     )
   }
@@ -285,13 +281,13 @@ build_expression_plot <- function(
       ggplot2::aes(x = groupId, ymin = ci_low, ymax = ci_high),
       inherit.aes = FALSE,
       width = 0.14,
-      linewidth = 0.45,
+      linewidth = 0.3,
       colour = "#1E211D",
       na.rm = TRUE
     ) +
     ggplot2::scale_fill_manual(values = colors) +
     ggplot2::scale_x_discrete(labels = group_labels) +
-    ggplot2::labs(x = NULL, y = "Relative expression (2^−ΔΔCt)", title = title) +
+    ggplot2::labs(x = NULL, y = "Relative expression", title = title) +
     theme_qpcr_nature()
   annotations <- significance_annotations(samples, contrasts, p_label_mode)
   top_expansion <- if (nrow(annotations) > 0) 0.24 else 0.08
@@ -317,7 +313,9 @@ build_expression_plot <- function(
       ggplot2::geom_segment(data = annotations, ggplot2::aes(x = x2, xend = x2, y = tick, yend = y), inherit.aes = FALSE, linewidth = 0.3) +
       ggplot2::geom_text(data = annotations, ggplot2::aes(x = xmid, y = y, label = label), inherit.aes = FALSE, vjust = -0.35, family = "Helvetica", size = 2.2)
   }
-  if (multiple_genes) plot <- plot + ggplot2::facet_wrap(~targetGene, scales = if (plot_type == "bar") "free_y" else "fixed")
+  if (multiple_genes) plot <- plot +
+    ggplot2::facet_wrap(~targetGene, scales = if (plot_type == "bar") "free_y" else "fixed") +
+    ggplot2::theme(strip.text = ggplot2::element_text(face = "italic"))
   plot
 }
 

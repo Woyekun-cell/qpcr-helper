@@ -78,4 +78,14 @@ describe("analysis API preparation", () => {
     });
     expect(prepared.previewPayload.figure).toMatchObject({ widthMm: 150, heightMm: 90, palette: "morandi-sage" });
   });
+
+  it("accepts sub-90-mm widths and selectable point shapes", () => {
+    const experiment = createDemoExperiment("en");
+    const prepared = prepareAnalysis({
+      experiment,
+      config: defaultAnalysisConfig(experiment),
+      figure: { plotType: "dot", widthMm: 60, heightMm: 60, dpi: 300, pointShape: "triangle" }
+    });
+    expect(prepared.previewPayload.figure).toMatchObject({ widthMm: 60, pointShape: "triangle" });
+  });
 });

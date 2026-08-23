@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { Workbench } from "./workbench";
@@ -63,5 +63,44 @@ describe("qPCR workbench", () => {
     expect(alpha).toHaveValue("0.01");
     expect(confidence).toHaveValue("0.9");
     expect(method).toHaveValue("mann_whitney");
+  });
+
+  it("lets researchers choose ACTB and rename target genes and groups", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+    const reference = screen.getByRole("combobox", { name: /内参基因/i });
+    await user.selectOptions(reference, "ACTB");
+    expect(reference).toHaveValue("ACTB");
+    expect(screen.getByText(/Reference/)).toBeInTheDocument();
+
+    const target = screen.getByRole("textbox", { name: /目标基因 1/i });
+    await user.clear(target);
+    await user.type(target, "IL6");
+    await user.tab();
+    expect(target).toHaveValue("IL6");
+
+    const firstGroup = screen.getByRole("textbox", { name: /分组 1/i });
+    await user.clear(firstGroup);
+    await user.type(firstGroup, "Vehicle");
+    await user.tab();
+    expect(firstGroup).toHaveValue("Vehicle");
+  });
+
+  it("offers sub-90-mm widths, gradient swatches and selectable point shapes", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getByRole("button", { name: /科研绘图/i }));
+    const width = screen.getByRole("combobox", { name: /投稿宽度/i });
+    expect(within(width).getByRole("option", { name: "60 mm" })).toBeInTheDocument();
+    expect(within(width).getByRole("option", { name: "75 mm" })).toBeInTheDocument();
+    await user.selectOptions(width, "60");
+    expect(width).toHaveValue("60");
+    expect(screen.getByRole("button", { name: /圆形点/i })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /三角形点/i }));
+    expect(screen.getByRole("button", { name: /三角形点/i })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /渐变/i }));
+    expect(screen.getByRole("button", { name: "Blue–red" }).querySelector("span"))
+      .toHaveStyle({ background: "linear-gradient(90deg, #315B8A 0%, #FFFFFF 50%, #B64F4A 100%)" });
   });
 });

@@ -42,11 +42,11 @@ interval_90 <- group_interval(samples, "groupId", confidence_level = 0.90)
 if (!all((interval_90$ci_high - interval_90$ci_low) < (interval_95$ci_high - interval_95$ci_low))) {
   stop("Figure confidence intervals did not honor the configured confidence level")
 }
-expected_axis <- "Relative expression (2^−ΔΔCt)"
-if (!identical(dot_plot$labels$y, expected_axis)) stop("Figure y-axis must report 2^-DeltaDeltaCt at a readable text size")
+expected_axis <- "Relative expression"
+if (!identical(dot_plot$labels$y, expected_axis)) stop("Figure y-axis must use a concise relative-expression label")
 x_scale <- dot_plot$scales$get_scales("x")
-if (is.null(x_scale) || !all(grepl("n = 3", unname(x_scale$labels), fixed = TRUE))) {
-  stop("Figure x-axis must report biological n for each group")
+if (is.null(x_scale) || any(grepl("n =", unname(x_scale$labels), fixed = TRUE))) {
+  stop("Figure x-axis must not repeat biological n")
 }
 
 bar_plot <- build_expression_plot(
@@ -63,10 +63,18 @@ if (!all(c("GeomSegment", "GeomText") %in% bar_geoms)) stop("Bar plot must inclu
 point_layer <- bar_plot$layers[[which(bar_geoms == "GeomPoint")[1]]]
 if (!identical(point_layer$aes_params$shape, 21)) stop("Independent points must use a filled shape with a visible outline")
 if (point_layer$aes_params$size > 1.4) stop("Independent points must remain compact")
+if (point_layer$aes_params$size < 1.3) stop("Independent points must remain clearly visible")
+error_layer <- bar_plot$layers[[which(bar_geoms == "GeomErrorbar")[1]]]
+if (error_layer$aes_params$linewidth > 0.32) stop("Error bars must use a fine publication-weight line")
 text_layers <- bar_plot$layers[bar_geoms == "GeomText"]
 if (!any(vapply(text_layers, function(layer) "***" %in% layer$data$label, logical(1)))) {
   stop("Adjusted p < 0.001 must render as three significance stars")
 }
+
+square_plot <- build_expression_plot(samples, plot_type = "bar", point_shape = "square")
+square_geoms <- vapply(square_plot$layers, function(layer) class(layer$geom)[1], character(1))
+square_points <- square_plot$layers[[which(square_geoms == "GeomPoint")[1]]]
+if (!identical(square_points$aes_params$shape, 22)) stop("Square point selection must reach the R layer")
 
 for (plot_kind in c("dot", "box", "violin")) {
   annotated_plot <- build_expression_plot(samples, plot_type = plot_kind, contrasts = contrast)
@@ -89,6 +97,15 @@ if (!identical(heatmap@matrix_param$gp$col, "black")) stop("Heatmap cells must h
 if (!identical(as.numeric(heatmap@matrix_param$width), as.numeric(heatmap@matrix_param$height))) {
   stop("Heatmap cell geometry must remain square for this square matrix")
 }
+rectangular_samples <- rbind(heat_samples, transform(samples, targetGene = "GENE3", foldChange = foldChange * 1.5))
+rectangular_heatmap <- build_expression_plot(rectangular_samples, plot_type = "heatmap")
+if (grid::unitType(rectangular_heatmap@matrix_param$width) != "mm" || grid::unitType(rectangular_heatmap@matrix_param$height) != "mm") {
+  stop("Heatmap cells must use fixed physical dimensions")
+}
+if (!isTRUE(all.equal(
+  as.numeric(rectangular_heatmap@matrix_param$width) / ncol(rectangular_heatmap@matrix),
+  as.numeric(rectangular_heatmap@matrix_param$height) / nrow(rectangular_heatmap@matrix)
+))) stop("Rectangular heatmaps must retain square cells")
 morandi_heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap", palette_name = "morandi-sage")
 macaron_heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap", palette_name = "macaron-gelato")
 if (identical(morandi_heatmap@matrix_color_mapping@colors, macaron_heatmap@matrix_color_mapping@colors)) {
@@ -99,6 +116,12 @@ custom_scale <- custom_plot$scales$get_scales("fill")
 if (!all(c("#112233", "#DDEEFF") %in% unname(custom_scale$palette(2)))) stop("Custom group colors must reach the plot scale")
 multi_gene_dot <- build_expression_plot(heat_samples, plot_type = "dot")
 if (!inherits(multi_gene_dot$facet, "FacetWrap")) stop("Multi-gene dot plots must facet by target gene")
+if (!identical(multi_gene_dot$theme$strip.text$face, "italic")) stop("Faceted gene names must be italic")
+if (!identical(unname(heatmap@row_names_param$gp$font), 3L)) stop("Heatmap gene names must be italic")
+
+gradient_heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap", palette_name = "gradient-blue-red")
+gradient_colors <- toupper(gradient_heatmap@matrix_color_mapping@colors)
+if (!any(grepl("#FFFFFF", gradient_colors, fixed = TRUE))) stop("Diverging gradients must have a white midpoint")
 
 legend <- build_figure_legend(
   samples = samples,
