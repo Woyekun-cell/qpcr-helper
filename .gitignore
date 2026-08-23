@@ -9,8 +9,8 @@ dist/
 .env.local
 .Rhistory
 .Rproj.user/
+.r-lib/
 renv/library/
 renv/staging/
 workspace/Project_001_qPCR科研分析平台/apps/web/.guest-data/
 workspace/Project_001_qPCR科研分析平台/services/analysis-r/artifacts/
-
