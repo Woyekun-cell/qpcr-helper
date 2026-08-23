@@ -1,0 +1,23 @@
+{
+  "name": "qpcr-research-platform",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @qpcr/web dev",
+    "build": "pnpm --filter @qpcr/contracts build && pnpm --filter @qpcr/web build",
+    "test": "pnpm -r --if-present test",
+    "test:contracts": "pnpm --filter @qpcr/contracts test",
+    "test:web": "pnpm --filter @qpcr/web test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
+
