@@ -325,6 +325,10 @@ export function normalizeImportedWells(rows: ImportedRow[]): CtWell[] {
     if (role !== "target" && role !== "reference") {
       throw new Error(`row ${rowNumber} has invalid role "${role}"`);
     }
+    const importedStatus = optionalText(row, "status")?.toLowerCase();
+    if (importedStatus && !["accepted", "excluded", "undetermined"].includes(importedStatus)) {
+      throw new Error(`row ${rowNumber} has invalid status "${importedStatus}"`);
+    }
     const timeText = optionalText(row, "time");
     const time = timeText === undefined ? undefined : Number(timeText);
     if (time !== undefined && !Number.isFinite(time)) {
@@ -340,7 +344,7 @@ export function normalizeImportedWells(rows: ImportedRow[]): CtWell[] {
       gene: requiredText(row, "gene", rowNumber),
       geneRole: role,
       ct: numericCt,
-      status: isMissing ? "undetermined" : "accepted",
+      status: (importedStatus ?? (isMissing ? "undetermined" : "accepted")) as CtWell["status"],
       ...(optionalText(row, "subject_id")
         ? { subjectId: optionalText(row, "subject_id") }
         : {}),
@@ -369,6 +373,17 @@ function acceptedValues(wells: CtWell[]): number[] {
 
 function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
+}
+
+function analysisUnitKey(well: CtWell): string {
+  return JSON.stringify([
+    well.biologicalReplicateId,
+    well.groupId,
+    well.subjectId ?? null,
+    well.factorA ?? null,
+    well.factorB ?? null,
+    well.time ?? null
+  ]);
 }
 
 export function analyzeDeltaDeltaCt(rawInput: ExperimentInput): AnalysisResult {
@@ -411,11 +426,15 @@ export function analyzeDeltaDeltaCt(rawInput: ExperimentInput): AnalysisResult {
     }
   }
 
-  const sampleIds = unique(input.wells.map((well) => well.sampleId));
+  const analysisUnitKeys = unique(input.wells.map(analysisUnitKey));
   const provisional: Omit<SampleExpression, "deltaDeltaCt" | "foldChange">[] = [];
 
-  for (const sampleId of sampleIds) {
-    const sampleWells = input.wells.filter((well) => well.sampleId === sampleId);
+  for (const unitKey of analysisUnitKeys) {
+    const sampleWells = input.wells.filter((well) => analysisUnitKey(well) === unitKey);
+    const biologicalReplicateId = sampleWells[0]?.biologicalReplicateId;
+    if (!biologicalReplicateId) throw new Error("analysis unit has no biological replicate ID");
+    const sourceSampleIds = unique(sampleWells.map((well) => well.sampleId));
+    const sampleId = sourceSampleIds.length === 1 ? sourceSampleIds[0]! : biologicalReplicateId;
     const groupIds = unique(sampleWells.map((well) => well.groupId));
     if (groupIds.length !== 1) throw new Error(`${sampleId} belongs to multiple groups`);
     const groupId = groupIds[0];
@@ -487,7 +506,7 @@ export function analyzeDeltaDeltaCt(rawInput: ExperimentInput): AnalysisResult {
       const firstTarget = targetWells[0];
       provisional.push({
         sampleId,
-        biologicalReplicateId: firstTarget?.biologicalReplicateId ?? sampleId,
+        biologicalReplicateId,
         groupId,
         targetGene,
         targetMeanCt,

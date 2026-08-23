@@ -37,8 +37,13 @@ if (!inherits(dot_plot, "ggplot")) stop("Dot plot must be a ggplot object")
 layer_geoms <- vapply(dot_plot$layers, function(layer) class(layer$geom)[1], character(1))
 if (!"GeomPoint" %in% layer_geoms) stop("Dot plot must expose independent observations")
 if (!"GeomErrorbar" %in% layer_geoms) stop("Dot plot must include 95% confidence intervals")
-expected_axis <- expression("Relative expression (" * 2^{-Delta * Delta * C[t]} * ")")
-if (!identical(dot_plot$labels$y, expected_axis)) stop("Unexpected y-axis label")
+interval_95 <- group_interval(samples, "groupId", confidence_level = 0.95)
+interval_90 <- group_interval(samples, "groupId", confidence_level = 0.90)
+if (!all((interval_90$ci_high - interval_90$ci_low) < (interval_95$ci_high - interval_95$ci_low))) {
+  stop("Figure confidence intervals did not honor the configured confidence level")
+}
+expected_axis <- "Relative expression (2^−ΔΔCt)"
+if (!identical(dot_plot$labels$y, expected_axis)) stop("Figure y-axis must report 2^-DeltaDeltaCt at a readable text size")
 x_scale <- dot_plot$scales$get_scales("x")
 if (is.null(x_scale) || !all(grepl("n = 3", unname(x_scale$labels), fixed = TRUE))) {
   stop("Figure x-axis must report biological n for each group")

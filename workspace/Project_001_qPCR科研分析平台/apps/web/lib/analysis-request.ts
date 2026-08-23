@@ -52,6 +52,20 @@ export const analysisRequestSchema = z.object({
       message: "selected one-way contrasts require at least one group pair"
     });
   }
+  const allowedMethods: Record<AnalysisConfig["design"], Set<AnalysisConfig["method"]>> = {
+    independent_two_group: new Set(["recommended", "welch_t", "mann_whitney"]),
+    paired_two_group: new Set(["recommended", "paired_t", "wilcoxon"]),
+    one_way: new Set(["recommended", "welch_anova", "anova", "kruskal_wallis"]),
+    two_way: new Set(["recommended", "linear_model"]),
+    repeated_time: new Set(["recommended", "mixed_model"])
+  };
+  if (!allowedMethods[value.config.design].has(value.config.method)) {
+    context.addIssue({
+      code: "custom",
+      path: ["config", "method"],
+      message: "statistical method must match the declared design"
+    });
+  }
 });
 
 export type AnalysisRequest = z.infer<typeof analysisRequestSchema>;
@@ -69,12 +83,17 @@ export function prepareAnalysis(request: AnalysisRequest) {
         correction: parsed.config.correction,
         contrastMode: parsed.config.contrastMode,
         method: parsed.config.method,
-        selectedComparisons: parsed.config.selectedComparisons
+        selectedComparisons: parsed.config.selectedComparisons,
+        alpha: parsed.config.alpha,
+        confidenceLevel: parsed.config.confidenceLevel
       }
     },
     previewPayload: {
       samples: calculation.samples,
-      config: { calibratorGroup: parsed.config.calibratorGroup },
+      config: {
+        calibratorGroup: parsed.config.calibratorGroup,
+        confidenceLevel: parsed.config.confidenceLevel
+      },
       figure: parsed.figure,
       title: parsed.experiment.targetGenes.join(", ")
     }

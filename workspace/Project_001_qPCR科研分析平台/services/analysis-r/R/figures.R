@@ -42,7 +42,10 @@ validate_figure_samples <- function(samples, plot_type) {
   }
 }
 
-group_interval <- function(samples, group_columns) {
+group_interval <- function(samples, group_columns, confidence_level = 0.95) {
+  if (length(confidence_level) != 1 || !is.finite(confidence_level) || confidence_level <= 0 || confidence_level >= 1) {
+    stop("confidence_level must be between 0 and 1")
+  }
   samples$log2_fold <- log2(samples$foldChange)
   split_key <- interaction(samples[group_columns], drop = TRUE, lex.order = TRUE)
   pieces <- split(samples, split_key)
@@ -56,7 +59,11 @@ group_interval <- function(samples, group_columns) {
       piece$sampleId
     }
     n <- length(unique(analysis_ids))
-    margin <- if (n > 1) stats::qt(0.975, df = n - 1) * stats::sd(piece$log2_fold) / sqrt(n) else NA_real_
+    margin <- if (n > 1) {
+      stats::qt((1 + confidence_level) / 2, df = n - 1) * stats::sd(piece$log2_fold) / sqrt(n)
+    } else {
+      NA_real_
+    }
     values <- as.list(piece[1, group_columns, drop = FALSE])
     c(
       values,
@@ -82,7 +89,8 @@ group_colors <- function(samples) {
 build_expression_plot <- function(
   samples,
   plot_type = c("dot", "box", "violin", "paired", "time", "heatmap"),
-  title = NULL
+  title = NULL,
+  confidence_level = 0.95
 ) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Figures require ggplot2")
   plot_type <- match.arg(plot_type)
@@ -117,7 +125,7 @@ build_expression_plot <- function(
 
   if (plot_type == "time") {
     summary_columns <- if (multiple_genes) c("targetGene", "groupId", "time") else c("groupId", "time")
-    summary_data <- group_interval(samples, summary_columns)
+    summary_data <- group_interval(samples, summary_columns, confidence_level)
     time_plot <- ggplot2::ggplot(samples, ggplot2::aes(x = time, y = foldChange, colour = groupId)) +
         ggplot2::geom_line(ggplot2::aes(group = subjectId), linewidth = 0.3, alpha = 0.25) +
         ggplot2::geom_point(size = 1.3, alpha = 0.7) +
@@ -134,7 +142,7 @@ build_expression_plot <- function(
         ) +
         ggplot2::scale_colour_manual(values = colors) +
         ggplot2::scale_y_log10() +
-        ggplot2::labs(x = "Time", y = expression("Relative expression (" * 2^{-Delta * Delta * C[t]} * ")"), title = title) +
+        ggplot2::labs(x = "Time", y = "Relative expression (2^−ΔΔCt)", title = title) +
         theme_qpcr_nature() +
         ggplot2::theme(legend.position = "top")
     if (multiple_genes) time_plot <- time_plot + ggplot2::facet_wrap(~targetGene)
@@ -142,7 +150,7 @@ build_expression_plot <- function(
   }
 
   summary_columns <- if (multiple_genes) c("targetGene", "groupId") else "groupId"
-  summary_data <- group_interval(samples, summary_columns)
+  summary_data <- group_interval(samples, summary_columns, confidence_level)
   group_n <- vapply(
     split(samples, samples$groupId),
     function(piece) {
@@ -194,7 +202,7 @@ build_expression_plot <- function(
     ggplot2::scale_colour_manual(values = colors) +
     ggplot2::scale_x_discrete(labels = group_labels) +
     ggplot2::scale_y_log10() +
-    ggplot2::labs(x = NULL, y = expression("Relative expression (" * 2^{-Delta * Delta * C[t]} * ")"), title = title) +
+    ggplot2::labs(x = NULL, y = "Relative expression (2^−ΔΔCt)", title = title) +
     theme_qpcr_nature()
   if (multiple_genes) plot <- plot + ggplot2::facet_wrap(~targetGene)
   plot
@@ -209,7 +217,7 @@ format_exact_p <- function(value) {
   if (value < 0.0001) format(value, scientific = TRUE, digits = 3) else formatC(value, format = "f", digits = 5)
 }
 
-build_figure_legend <- function(samples, contrasts, method, correction) {
+build_figure_legend <- function(samples, contrasts, method, correction, confidence_level = 0.95) {
   group_n <- table(samples$groupId)
   n_text <- paste(sprintf("%s %d", names(group_n), as.integer(group_n)), collapse = ", ")
   comparison_text <- if (nrow(contrasts) > 0) {
@@ -229,9 +237,11 @@ build_figure_legend <- function(samples, contrasts, method, correction) {
   } else {
     "No pairwise contrast was requested."
   }
+  confidence_label <- format(100 * confidence_level, trim = TRUE, scientific = FALSE)
   paste0(
     "Points show independent biological replicates (n = ", n_text, "). ",
-    "Center marks and error bars show geometric mean relative expression and 95% CI calculated on the ΔCt scale. ",
+    "Center marks and error bars show geometric mean relative expression and ", confidence_label,
+    "% CI calculated on the ΔCt scale. ",
     method, " with ", correction, " correction: ", comparison_text, ". ",
     "Technical replicates were averaged before inferential analysis. Source data are provided in the export package."
   )

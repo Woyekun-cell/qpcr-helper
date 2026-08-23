@@ -13,6 +13,15 @@ export interface RContrast {
 export interface RGeneAnalysis {
   method?: string;
   omnibus?: unknown;
+  diagnostics?: {
+    residual_normality_p?: number;
+    variance_homogeneity_p?: number;
+    standardized_residual_outlier_count?: number;
+    minimum_group_n?: number;
+    automatic_switch?: boolean;
+    recommendation_note?: string;
+    alternative?: string;
+  };
 }
 
 export interface PlatformAnalysisResult {

@@ -14,5 +14,11 @@ export async function GET(
   const token = request.headers.get("x-capability-token") ?? "";
   const guest = await guestJobRepository.read(id, token);
   if (!guest) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
-  return NextResponse.json(guest, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({
+    id: guest.id,
+    status: guest.status,
+    result: guest.result,
+    createdAt: guest.createdAt,
+    expiresAt: guest.expiresAt
+  }, { headers: { "Cache-Control": "no-store" } });
 }

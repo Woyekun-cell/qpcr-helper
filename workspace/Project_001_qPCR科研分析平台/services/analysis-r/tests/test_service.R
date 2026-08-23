@@ -32,7 +32,9 @@ payload <- list(
     calibratorGroup = "control",
     correction = "holm",
     contrastMode = "selected",
-    method = "recommended"
+    method = "recommended",
+    alpha = 0.05,
+    confidenceLevel = 0.90
   )
 )
 
@@ -40,6 +42,9 @@ result <- run_analysis_payload(payload)
 expect_equal(result$status, "succeeded")
 expect_equal(result$analysisUnit, "biological replicate")
 expect_equal(result$contrasts$fold_change, 8)
+expect_equal(result$config$alpha, 0.05)
+expect_equal(result$config$confidenceLevel, 0.90)
+if (!isTRUE(result$contrasts$significant_family)) stop("Configured alpha was not applied to adjusted p values")
 if (!is.null(result$analyses[[1]]$model)) stop("API result must not expose non-serializable model objects")
 
 multi_gene <- payload

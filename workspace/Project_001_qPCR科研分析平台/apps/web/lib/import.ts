@@ -1,6 +1,6 @@
-import { normalizeImportedWells, type CtWell } from "@qpcr/contracts";
+import { normalizeImportedWells, qcDecisionSchema, type CtWell, type QcDecision } from "@qpcr/contracts";
 import Papa from "papaparse";
-import { readSheet } from "read-excel-file/browser";
+import readXlsxFile from "read-excel-file/browser";
 
 function normalizeHeaders(row: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
@@ -24,13 +24,42 @@ export function parseCtText(text: string): CtWell[] {
   return normalizeImportedWells(rows.map(normalizeHeaders));
 }
 
-export async function parseCtWorkbook(buffer: ArrayBuffer): Promise<CtWell[]> {
-  const sheet = await readSheet(buffer);
+function sheetRows(sheet: Array<Array<unknown>>): Array<Record<string, unknown>> {
   const [headerRow, ...dataRows] = sheet;
   if (!headerRow || dataRows.length === 0) throw new Error("Ct workbook has no data rows");
   const headers = headerRow.map((cell) => String(cell ?? "").trim().toLowerCase());
-  const rows = dataRows
+  return dataRows
     .filter((row) => row.some((cell) => cell !== null && cell !== ""))
     .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])));
-  return normalizeImportedWells(rows.map(normalizeHeaders));
+}
+
+export interface CtWorkbookBundle {
+  wells: CtWell[];
+  qcDecisions: QcDecision[];
+}
+
+export async function parseCtWorkbookBundle(buffer: ArrayBuffer): Promise<CtWorkbookBundle> {
+  const sheets = await readXlsxFile(buffer);
+  const ctSheet = sheets.find((sheet) => /^(ct[_ ]?data|raw[_ ]?wells)$/i.test(sheet.sheet)) ?? sheets[0];
+  if (!ctSheet) throw new Error("Ct workbook has no sheets");
+  const wells = normalizeImportedWells(sheetRows(ctSheet.data).map(normalizeHeaders));
+  const qcSheet = sheets.find((sheet) => /^qc[_ ]?decisions$/i.test(sheet.sheet));
+  const qcDecisions = qcSheet ? sheetRows(qcSheet.data).map((raw) => {
+    const row = normalizeHeaders(raw);
+    const decidedAt = row.decided_at instanceof Date
+      ? row.decided_at.toISOString()
+      : String(row.decided_at ?? "");
+    return qcDecisionSchema.parse({
+      wellId: row.well_id,
+      decision: String(row.decision ?? "").toLowerCase(),
+      reason: row.reason,
+      operator: row.operator,
+      decidedAt
+    });
+  }) : [];
+  return { wells, qcDecisions };
+}
+
+export async function parseCtWorkbook(buffer: ArrayBuffer): Promise<CtWell[]> {
+  return (await parseCtWorkbookBundle(buffer)).wells;
 }

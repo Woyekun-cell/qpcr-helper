@@ -13,7 +13,8 @@
     "test:contracts": "pnpm --filter @qpcr/contracts test",
     "test:web": "pnpm --filter @qpcr/web test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "pnpm -r --if-present lint"
+    "lint": "pnpm -r --if-present lint",
+    "check:contrast": "node scripts/check-contrast.mjs"
   },
   "devDependencies": {
     "typescript": "6.0.3",

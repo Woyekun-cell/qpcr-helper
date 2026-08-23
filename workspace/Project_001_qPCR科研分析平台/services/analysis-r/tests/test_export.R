@@ -34,15 +34,26 @@ contrasts <- data.frame(
 raw_wells <- data.frame(
   wellId = c("A1", "A2"),
   sampleId = c("c1", "c1"),
+  biologicalReplicateId = c("bio-1", "bio-1"),
+  technicalReplicateId = c("tech-1", "tech-1"),
   groupId = c("=HYPERLINK(\"https://example.test\")", "control"),
   gene = c("GENE1", "GAPDH"),
+  geneRole = c("target", "reference"),
   ct = c(25, 20),
+  status = c("excluded", "accepted"),
+  plateId = c("plate-1", "plate-1"),
+  batch = c("batch-a", "batch-a"),
   stringsAsFactors = FALSE
 )
 qc <- data.frame(
-  code = "SINGLE_REFERENCE_GENE",
-  severity = "info",
-  message = "Reference stability must be independently validated.",
+  code = c("SINGLE_REFERENCE_GENE", NA),
+  severity = c("info", NA),
+  message = c("Reference stability must be independently validated.", NA),
+  wellId = c(NA, "A1"),
+  decision = c(NA, "excluded"),
+  reason = c(NA, "Melt curve review"),
+  operator = c(NA, "user-1"),
+  decidedAt = c(NA, "2026-08-23T10:00:00.000Z"),
   stringsAsFactors = FALSE
 )
 analysis <- list(
@@ -56,7 +67,9 @@ config <- list(
   calibratorGroup = "control",
   correction = "Holm",
   contrastMode = "selected",
-  method = "recommended"
+  method = "recommended",
+  alpha = 0.01,
+  confidenceLevel = 0.90
 )
 
 destination <- tempfile("qpcr-export-")
@@ -83,6 +96,7 @@ required <- c(
   "raw_wells_safe.csv",
   "clean_samples.csv",
   "qc_log.csv",
+  "qpcr_roundtrip.xlsx",
   "statistics.xlsx",
   "figure.svg",
   "figure.pdf",
@@ -99,11 +113,28 @@ if (!all(required %in% entries)) stop(sprintf("ZIP missing: %s", paste(setdiff(r
 
 safe_csv <- readLines(file.path(bundle$directory, "raw_wells_safe.csv"), warn = FALSE)
 if (!any(grepl("'=HYPERLINK", safe_csv, fixed = TRUE))) stop("CSV formula injection was not neutralized")
+safe_headers <- strsplit(safe_csv[1], ",", fixed = TRUE)[[1]]
+if (!all(c('"well_id"', '"biological_replicate"', '"technical_replicate"', '"status"') %in% safe_headers)) {
+  stop("Safe CSV does not use re-importable qPCR headers")
+}
+roundtrip_wells <- openxlsx::read.xlsx(file.path(bundle$directory, "qpcr_roundtrip.xlsx"), sheet = "Ct_Data")
+roundtrip_qc <- openxlsx::read.xlsx(file.path(bundle$directory, "qpcr_roundtrip.xlsx"), sheet = "QC_Decisions")
+if (!identical(roundtrip_wells$status[1], "excluded")) stop("XLSX did not preserve well status")
+if (!identical(roundtrip_qc$decision[1], "excluded")) stop("XLSX did not preserve QC decisions")
 raw_json <- jsonlite::read_json(file.path(bundle$directory, "raw_input.json"), simplifyVector = TRUE)
 if (!identical(raw_json$groupId[1], "=HYPERLINK(\"https://example.test\")")) stop("Raw JSON must preserve original input")
 manifest <- jsonlite::read_json(file.path(bundle$directory, "manifest.json"), simplifyVector = TRUE)
 if (!all(c("path", "bytes", "sha256") %in% names(manifest$files))) stop("Manifest is missing file integrity fields")
 if (!all(grepl("^[a-f0-9]{64}$", manifest$files$sha256))) stop("Manifest SHA-256 values are invalid")
 if (!all(c("appVersion", "rVersion", "parameters") %in% names(manifest))) stop("Manifest is missing reproducibility metadata")
+if (!grepl("技术重复", methods_text(config, analysis$method, "zh-CN"), fixed = TRUE)) {
+  stop("Chinese Methods text was not generated for zh-CN locale")
+}
+methods_output <- readLines(file.path(bundle$directory, "methods.txt"), warn = FALSE)
+legend_output <- readLines(file.path(bundle$directory, "figure_legend.txt"), warn = FALSE)
+if (!any(grepl("90%", methods_output, fixed = TRUE)) || !any(grepl("alpha = 0.01", methods_output, fixed = TRUE))) {
+  stop("Methods did not preserve confidence level and alpha")
+}
+if (!any(grepl("90% CI", legend_output, fixed = TRUE))) stop("Figure legend did not preserve confidence level")
 
 cat("export tests passed\n")

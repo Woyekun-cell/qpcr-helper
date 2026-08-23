@@ -1,6 +1,6 @@
 # qPCR 科研分析平台
 
-输入逐孔 Ct/Cq，完成透明 QC、2^-ΔΔCt、实验设计驱动多重比较与 R-only 出版级科研绘图。
+输入逐孔 Ct/Cq，完成透明 QC、2^-ΔΔCt、实验设计驱动多重比较、可配置 CI 与 R-only 出版级科研绘图。
 
 ## 目录
 
@@ -24,12 +24,12 @@ cd services/analysis-r && Rscript run.R
 pnpm dev
 ```
 
-访问 `http://localhost:3000`，可直接载入八倍表达演示。测试：`pnpm test && pnpm typecheck && pnpm build`；R 测试位于 `services/analysis-r/tests`。
+访问 `http://localhost:3000`，可直接载入八倍表达演示。测试：`pnpm test && pnpm typecheck && pnpm lint && pnpm check:contrast && pnpm build`；R 测试位于 `services/analysis-r/tests`。
 
 ## 部署
 
-- Vercel：项目根目录设为本目录；构建命令 `pnpm build`，配置 Supabase 与 R 服务环境变量。
-- Render：使用 `services/analysis-r/render.yaml`；把生成的共享密钥同步到 Vercel。
-- Supabase：执行 `supabase/migrations`；确认私有 `analysis-artifacts` bucket 与 RLS 生效。
+- Vercel：Root Directory 设为 `workspace/Project_001_qPCR科研分析平台/apps/web`，开启外部源码访问；配置 Supabase 与 R 服务环境变量。
+- Render：Blueprint Path 设为 `workspace/Project_001_qPCR科研分析平台/services/analysis-r/render.yaml`；把生成的共享密钥同步到 Vercel。
+- Supabase：执行 `supabase/migrations`；确认私有 `analysis-artifacts` bucket 与 RLS 生效；在 Auth URL Configuration 中加入生产地址 `https://<域名>/auth/callback` 和本地地址 `http://localhost:3000/auth/callback`。
 
 未提供 Supabase、Vercel、Render 凭据时，代码可本地完整运行，但不会自动创建线上资源。

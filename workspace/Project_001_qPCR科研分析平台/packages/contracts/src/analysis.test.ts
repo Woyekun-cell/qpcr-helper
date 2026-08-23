@@ -130,6 +130,26 @@ describe("2^-ΔΔCt analysis", () => {
     expect(input.wells.filter((well) => well.sampleId === "t1").every((well) => well.status === "accepted")).toBe(true);
   });
 
+  test("does not treat split sample IDs from one biological replicate as independent n", () => {
+    const input = twoGroupExperiment();
+    const splitPlateWells = input.wells
+      .filter((well) => well.sampleId === "t1")
+      .map((well) => ({
+        ...well,
+        wellId: `${well.wellId}-split`,
+        sampleId: "t1-split",
+        technicalReplicateId: `${well.technicalReplicateId}-split`
+      }));
+    input.wells.push(...splitPlateWells);
+
+    const result = analyzeDeltaDeltaCt(input);
+    const treated = result.samples.filter((sample) => sample.groupId === "treated");
+    const t1 = treated.find((sample) => sample.biologicalReplicateId === "t1");
+    expect(treated).toHaveLength(2);
+    expect(t1?.targetTechnicalN).toBe(4);
+    expect(result.groups.find((group) => group.groupId === "treated")?.biologicalN).toBe(2);
+  });
+
   test("rejects a biological sample without a valid reference Ct", () => {
     const input = twoGroupExperiment();
     input.wells = input.wells.map((well) =>

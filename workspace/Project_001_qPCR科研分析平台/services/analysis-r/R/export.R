@@ -14,6 +14,49 @@ sanitize_spreadsheet_frame <- function(data) {
   safe
 }
 
+export_column <- function(data, candidates) {
+  name <- candidates[candidates %in% names(data)][1]
+  if (is.na(name)) return(rep(NA_character_, nrow(data)))
+  data[[name]]
+}
+
+standardize_raw_wells <- function(raw_wells) {
+  data.frame(
+    well_id = export_column(raw_wells, c("well_id", "wellId")),
+    sample_id = export_column(raw_wells, c("sample_id", "sampleId")),
+    biological_replicate = export_column(raw_wells, c("biological_replicate", "biologicalReplicateId")),
+    technical_replicate = export_column(raw_wells, c("technical_replicate", "technicalReplicateId")),
+    group = export_column(raw_wells, c("group", "groupId")),
+    gene = export_column(raw_wells, "gene"),
+    role = export_column(raw_wells, c("role", "geneRole")),
+    ct = export_column(raw_wells, "ct"),
+    status = export_column(raw_wells, "status"),
+    subject_id = export_column(raw_wells, c("subject_id", "subjectId")),
+    factor_a = export_column(raw_wells, c("factor_a", "factorA")),
+    factor_b = export_column(raw_wells, c("factor_b", "factorB")),
+    time = export_column(raw_wells, "time"),
+    plate_id = export_column(raw_wells, c("plate_id", "plateId")),
+    batch = export_column(raw_wells, "batch"),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+}
+
+standardize_qc_decisions <- function(qc) {
+  decisions <- data.frame(
+    well_id = export_column(qc, c("well_id", "wellId")),
+    decision = export_column(qc, "decision"),
+    reason = export_column(qc, "reason"),
+    operator = export_column(qc, "operator"),
+    decided_at = export_column(qc, c("decided_at", "decidedAt")),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  keep <- !is.na(decisions$well_id) & nzchar(trimws(as.character(decisions$well_id))) &
+    !is.na(decisions$decision) & nzchar(trimws(as.character(decisions$decision)))
+  decisions[keep, , drop = FALSE]
+}
+
 write_utf8_lines <- function(text, path) {
   connection <- file(path, open = "w", encoding = "UTF-8")
   on.exit(close(connection), add = TRUE)
@@ -21,13 +64,17 @@ write_utf8_lines <- function(text, path) {
 }
 
 methods_text <- function(config, method, locale) {
+  confidence_level <- if (is.null(config$confidenceLevel)) 0.95 else as.numeric(config$confidenceLevel)
+  confidence_label <- format(100 * confidence_level, trim = TRUE, scientific = FALSE)
+  alpha <- if (is.null(config$alpha)) 0.05 else as.numeric(config$alpha)
   if (identical(locale, "zh-CN")) {
     return(paste0(
       "技术重复在推断统计前按样本和基因汇总。目标基因 Ct 减去单个内参基因 Ct 得到 ΔCt；",
       "各样本 ΔCt 减去对照组平均 ΔCt 得到 ΔΔCt，相对表达按 2^-ΔΔCt 计算。",
       "统计以生物学重复为独立单位，在 ΔCt 尺度采用 ", method, "。",
       "比较模式为 ", config$contrastMode, "，多重比较校正为 ", config$correction, "。",
-      "效应及 95% CI 反变换至相对表达尺度。图形由 R 生成。"
+      "显著性水平 α = ", alpha, "。",
+      "效应及 ", confidence_label, "% CI 反变换至相对表达尺度。图形由 R 生成。"
     ))
   }
   paste0(
@@ -35,7 +82,8 @@ methods_text <- function(config, method, locale) {
     "Delta Ct was calculated as target Ct minus the single reference-gene Ct; delta-delta Ct was calculated relative to the calibrator-group mean, and relative expression as 2^-delta-delta Ct. ",
     "Biological replicates were the independent units. Analysis used ", method, " on the delta Ct scale. ",
     "The comparison mode was ", config$contrastMode, " with ", config$correction, " multiplicity correction. ",
-    "Effects and 95% confidence intervals were back-transformed to relative-expression units. Figures were generated in R."
+    "The significance threshold was alpha = ", alpha, ". ",
+    "Effects and ", confidence_label, "% confidence intervals were back-transformed to relative-expression units. Figures were generated in R."
   )
 }
 
@@ -69,8 +117,10 @@ create_research_export <- function(
     auto_unbox = TRUE,
     na = "null"
   )
+  portable_wells <- standardize_raw_wells(raw_wells)
+  portable_qc <- standardize_qc_decisions(qc)
   utils::write.csv(
-    sanitize_spreadsheet_frame(raw_wells),
+    sanitize_spreadsheet_frame(portable_wells),
     file.path(bundle_directory, "raw_wells_safe.csv"),
     row.names = FALSE,
     na = ""
@@ -88,10 +138,24 @@ create_research_export <- function(
     na = ""
   )
 
+  roundtrip_workbook <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(roundtrip_workbook, "Ct_Data")
+  openxlsx::writeData(roundtrip_workbook, "Ct_Data", sanitize_spreadsheet_frame(portable_wells))
+  openxlsx::freezePane(roundtrip_workbook, "Ct_Data", firstRow = TRUE)
+  openxlsx::addWorksheet(roundtrip_workbook, "QC_Decisions")
+  openxlsx::writeData(roundtrip_workbook, "QC_Decisions", sanitize_spreadsheet_frame(portable_qc))
+  openxlsx::freezePane(roundtrip_workbook, "QC_Decisions", firstRow = TRUE)
+  openxlsx::saveWorkbook(
+    roundtrip_workbook,
+    file.path(bundle_directory, "qpcr_roundtrip.xlsx"),
+    overwrite = TRUE
+  )
+
   workbook <- openxlsx::createWorkbook()
   sheets <- list(
     Contrasts = analysis$contrasts,
     Omnibus = analysis$omnibus,
+    Diagnostics = if (is.null(analysis$diagnostics)) data.frame() else analysis$diagnostics,
     Samples = samples,
     QC = qc
   )
@@ -106,7 +170,8 @@ create_research_export <- function(
     overwrite = TRUE
   )
 
-  plot <- build_expression_plot(samples, plot_type = plot_type)
+  confidence_level <- if (is.null(config$confidenceLevel)) 0.95 else as.numeric(config$confidenceLevel)
+  plot <- build_expression_plot(samples, plot_type = plot_type, confidence_level = confidence_level)
   save_publication_figure(
     plot,
     file.path(bundle_directory, "figure"),
@@ -119,7 +184,8 @@ create_research_export <- function(
     samples,
     analysis$contrasts,
     analysis$method,
-    config$correction
+    config$correction,
+    confidence_level
   )
   write_utf8_lines(legend, file.path(bundle_directory, "figure_legend.txt"))
   write_utf8_lines(
@@ -157,7 +223,11 @@ create_research_export <- function(
   reproduce_script <- c(
     "source(\"figure_functions.R\")",
     "samples <- read.csv(\"clean_samples.csv\", stringsAsFactors = FALSE)",
-    sprintf("plot <- build_expression_plot(samples, plot_type = \"%s\")", plot_type),
+    sprintf(
+      "plot <- build_expression_plot(samples, plot_type = \"%s\", confidence_level = %s)",
+      plot_type,
+      confidence_level
+    ),
     sprintf(
       "save_publication_figure(plot, \"figure-reproduced\", width_mm = %s, height_mm = %s, dpi = %s)",
       width_mm,

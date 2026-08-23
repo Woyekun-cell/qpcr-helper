@@ -2,7 +2,9 @@ services:
   - type: web
     name: qpcr-analysis-r
     runtime: docker
+    rootDir: workspace/Project_001_qPCR科研分析平台/services/analysis-r
     dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /health
     envVars:
       - key: ANALYSIS_R_SHARED_SECRET

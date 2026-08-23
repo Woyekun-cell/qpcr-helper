@@ -153,6 +153,40 @@ describe("spreadsheet import normalization", () => {
       ])
     ).toThrowError('row 1 has invalid Ct "twenty"');
   });
+
+  test("preserves an explicit audited well status on round-trip import", () => {
+    const wells = normalizeImportedWells([
+      {
+        well_id: "A1",
+        sample_id: "s1",
+        biological_replicate: "bio-1",
+        technical_replicate: "tech-1",
+        group: "control",
+        gene: "IL6",
+        role: "target",
+        ct: 24.2,
+        status: "excluded"
+      }
+    ]);
+
+    expect(wells[0]?.status).toBe("excluded");
+  });
+
+  test("rejects unknown imported well status values", () => {
+    expect(() => normalizeImportedWells([
+      {
+        well_id: "A1",
+        sample_id: "s1",
+        biological_replicate: "bio-1",
+        technical_replicate: "tech-1",
+        group: "control",
+        gene: "IL6",
+        role: "target",
+        ct: 24.2,
+        status: "maybe"
+      }
+    ])).toThrowError('row 1 has invalid status "maybe"');
+  });
 });
 
 test("publishes a JSON Schema with the required analysis fields", () => {

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
 export interface GuestJobPayload {
-  input: unknown;
+  inputHash: string;
   result: unknown;
 }
 
@@ -60,7 +60,7 @@ export class GuestJobStore {
       status: job.status,
       createdAt: job.createdAt,
       expiresAt: job.expiresAt,
-      input: job.input,
+      inputHash: job.inputHash,
       result: job.result
     };
   }

@@ -16,6 +16,7 @@ describe("analysis API preparation", () => {
     );
     expect(geometricMean).toBeCloseTo(8, 12);
     expect(prepared.statisticsPayload.samples).toHaveLength(6);
+    expect(prepared.statisticsPayload.config).toMatchObject({ alpha: 0.05, confidenceLevel: 0.95 });
   });
 
   it("rejects a specialized one-way correction for a two-group model", () => {
@@ -25,6 +26,15 @@ describe("analysis API preparation", () => {
       config: { ...defaultAnalysisConfig(experiment), correction: "tukey" },
       figure: { plotType: "dot", widthMm: 90, heightMm: 70, dpi: 300 }
     })).toThrow(/one-way/i);
+  });
+
+  it("rejects a model family that does not match the declared design", () => {
+    const experiment = createDemoExperiment("en");
+    expect(() => prepareAnalysis({
+      experiment,
+      config: { ...defaultAnalysisConfig(experiment), method: "mixed_model" },
+      figure: { plotType: "dot", widthMm: 90, heightMm: 70, dpi: 300 }
+    })).toThrow(/method/i);
   });
 
   it("defaults one-way control comparisons to Dunnett", () => {

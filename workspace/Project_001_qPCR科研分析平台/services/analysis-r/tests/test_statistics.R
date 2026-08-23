@@ -60,11 +60,27 @@ result <- run_statistics(
 )
 expect_equal(result$method, "Welch two-sample t-test")
 expect_equal(result$independent_n, c(control = 3, treated = 3))
+if (!identical(result$diagnostics$automatic_switch, FALSE)) stop("Diagnostics must never silently switch methods")
+expect_equal(result$diagnostics$minimum_group_n, 3)
+if (!is.finite(result$diagnostics$residual_normality_p)) stop("Residual normality diagnostic is missing")
+if (!is.finite(result$diagnostics$variance_homogeneity_p)) stop("Variance diagnostic is missing")
+if (!is.character(result$diagnostics$recommendation_note)) stop("Diagnostic recommendation note is missing")
 expect_equal(round(result$contrasts$fold_change, 8), 8)
 if (!(result$contrasts$p_value < 0.001)) stop("Expected a small p value for the known fixture")
 if (!all(c("estimate_delta_ct", "ci_low_delta_ct", "ci_high_delta_ct", "p_value", "p_adjusted") %in% names(result$contrasts))) {
   stop("Contrast output is missing required reporting fields")
 }
+result_90 <- run_statistics(
+  fixture,
+  design = "independent_two_group",
+  calibrator_group = "control",
+  correction = "holm",
+  confidence_level = 0.90
+)
+width_95 <- result$contrasts$ci_high_delta_ct - result$contrasts$ci_low_delta_ct
+width_90 <- result_90$contrasts$ci_high_delta_ct - result_90$contrasts$ci_low_delta_ct
+if (!(width_90 < width_95)) stop("A 90% interval must be narrower than a 95% interval")
+expect_equal(result_90$diagnostics$confidence_level, 0.90)
 
 nonparametric_two_group <- run_statistics(
   fixture,
@@ -125,6 +141,9 @@ expect_equal(
   dunnett$contrasts$p_adjusted,
   c(2.37327703360601e-04, 3.91502528285237e-07)
 )
+if (!all(dunnett$contrasts$p_value <= dunnett$contrasts$p_adjusted)) {
+  stop("Dunnett output must distinguish raw and simultaneous adjusted p values")
+}
 if (!all(grepl("- control", dunnett$contrasts$contrast, fixed = TRUE))) {
   stop("Dunnett output must compare each treatment with the calibrator")
 }

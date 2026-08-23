@@ -55,7 +55,7 @@ create table public.guest_analysis_jobs (
   id uuid primary key,
   token_hash text not null check (token_hash ~ '^[a-f0-9]{64}$'),
   status text not null default 'succeeded' check (status in ('succeeded', 'failed')),
-  input jsonb not null,
+  input_hash text not null check (input_hash ~ '^[a-f0-9]{64}$'),
   result jsonb not null,
   created_at timestamptz not null default now(),
   expires_at timestamptz not null

@@ -20,7 +20,7 @@ export const guestJobRepository = {
       id,
       token_hash: tokenHash(token),
       status: "succeeded",
-      input: payload.input,
+      input_hash: payload.inputHash,
       result: payload.result,
       expires_at: new Date(expiresAt).toISOString()
     });
@@ -34,7 +34,7 @@ export const guestJobRepository = {
     if (!token) return null;
     const { data } = await admin
       .from("guest_analysis_jobs")
-      .select("id, status, input, result, created_at, expires_at")
+      .select("id, status, input_hash, result, created_at, expires_at")
       .eq("id", id)
       .eq("token_hash", tokenHash(token))
       .gt("expires_at", new Date().toISOString())
@@ -43,7 +43,7 @@ export const guestJobRepository = {
     return {
       id: data.id,
       status: "succeeded",
-      input: data.input,
+      inputHash: data.input_hash,
       result: data.result,
       createdAt: new Date(data.created_at).getTime(),
       expiresAt: new Date(data.expires_at).getTime()

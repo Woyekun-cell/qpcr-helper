@@ -26,6 +26,14 @@ required_config_value <- function(config, name) {
   as.character(value)
 }
 
+numeric_config_value <- function(config, name, default) {
+  value <- if (is.null(config[[name]])) default else as.numeric(config[[name]])
+  if (length(value) != 1 || !is.finite(value) || value <= 0 || value >= 1) {
+    stop(sprintf("config.%s must be between 0 and 1", name))
+  }
+  value
+}
+
 serializable_analysis <- function(result) {
   result$model <- NULL
   result
@@ -41,6 +49,8 @@ run_analysis_payload <- function(payload) {
   correction <- if (is.null(config$correction)) "holm" else as.character(config$correction)
   contrast_mode <- if (is.null(config$contrastMode)) "selected" else as.character(config$contrastMode)
   method <- if (is.null(config$method)) "recommended" else as.character(config$method)
+  alpha <- numeric_config_value(config, "alpha", 0.05)
+  confidence_level <- numeric_config_value(config, "confidenceLevel", 0.95)
 
   data$groupId <- factor(
     data$groupId,
@@ -50,7 +60,7 @@ run_analysis_payload <- function(payload) {
   analyses <- lapply(genes, function(gene) {
     gene_data <- data[data$targetGene == gene, , drop = FALSE]
     within_gene_correction <- if (tolower(correction) %in% c("bh", "fdr")) "none" else correction
-    serializable_analysis(
+    gene_analysis <- serializable_analysis(
       run_statistics(
         gene_data,
         design = design,
@@ -58,9 +68,14 @@ run_analysis_payload <- function(payload) {
         correction = within_gene_correction,
         contrast_mode = contrast_mode,
         method = method,
-        selected_comparisons = config$selectedComparisons
+        selected_comparisons = config$selectedComparisons,
+        confidence_level = confidence_level
       )
     )
+    if (!is.null(gene_analysis$contrasts) && nrow(gene_analysis$contrasts) > 0) {
+      gene_analysis$contrasts$significant <- gene_analysis$contrasts$p_adjusted < alpha
+    }
+    gene_analysis
   })
   names(analyses) <- genes
   contrast_frames <- lapply(analyses, function(analysis) analysis$contrasts)
@@ -73,6 +88,7 @@ run_analysis_payload <- function(payload) {
     } else {
       contrasts$p_adjusted
     }
+    contrasts$significant_family <- contrasts$p_adjusted_family < alpha
   }
 
   list(
@@ -85,7 +101,9 @@ run_analysis_payload <- function(payload) {
       correction = correction,
       contrastMode = contrast_mode,
       method = method,
-      selectedComparisons = config$selectedComparisons
+      selectedComparisons = config$selectedComparisons,
+      alpha = alpha,
+      confidenceLevel = confidence_level
     ),
     analyses = analyses,
     contrasts = contrasts,
@@ -135,7 +153,8 @@ run_preview_payload <- function(payload) {
   plot <- build_expression_plot(
     samples,
     plot_type = plot_type,
-    title = if (is.null(payload$title)) NULL else as.character(payload$title)
+    title = if (is.null(payload$title)) NULL else as.character(payload$title),
+    confidence_level = numeric_config_value(config, "confidenceLevel", 0.95)
   )
   list(
     status = "succeeded",
@@ -162,6 +181,7 @@ run_export_payload <- function(payload, destination = tempfile("qpcr-export-")) 
   if (is.null(analysis) || !is.list(analysis)) stop("analysis is required")
   analysis$contrasts <- payload_frame(analysis$contrasts)
   analysis$omnibus <- payload_frame(analysis$omnibus)
+  analysis$diagnostics <- payload_frame(analysis$diagnostics)
   figure <- if (is.null(payload$figure)) list() else payload$figure
   dir.create(destination, recursive = TRUE, showWarnings = FALSE)
   create_research_export(
