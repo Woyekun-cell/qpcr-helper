@@ -82,7 +82,7 @@ function(req, res) {
   on.exit(unlink(temporary, recursive = TRUE, force = TRUE), add = TRUE)
   tryCatch({
     bundle <- run_export_payload(parse_request_json(req), destination = temporary)
-    res$setHeader("Content-Disposition", "attachment; filename=qpcr-research-export.zip")
+    res$setHeader("Content-Disposition", "attachment; filename=qpcr-helper-research-export.zip")
     size <- file.info(bundle$zip)$size
     connection <- file(bundle$zip, "rb")
     on.exit(close(connection), add = TRUE)

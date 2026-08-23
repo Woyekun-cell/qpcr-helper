@@ -125,7 +125,7 @@ export async function persistAuthenticatedArtifact(jobId: string, zip: ArrayBuff
   const { supabase, user } = await currentUser();
   if (!supabase || !user) return null;
   const sha256 = createHash("sha256").update(Buffer.from(zip)).digest("hex");
-  const storagePath = `${user.id}/${jobId}/${randomUUID()}/qpcr-research-package.zip`;
+  const storagePath = `${user.id}/${jobId}/${randomUUID()}/qpcr-helper-research-package.zip`;
   const { error: storageError } = await supabase.storage
     .from("analysis-artifacts")
     .upload(storagePath, zip, { contentType: "application/zip", upsert: false });

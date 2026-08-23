@@ -5,14 +5,18 @@ import { Workbench } from "./workbench";
 import { guestProjects } from "@/lib/guest-projects";
 
 describe("qPCR workbench", () => {
-  it("loads the scientific demo and supports bilingual labels", async () => {
+  it("loads one of six examples and supports bilingual qPCR Helper branding", async () => {
     const user = userEvent.setup();
     render(<Workbench />);
-    expect(screen.getByRole("heading", { name: /qPCR 科研分析平台/i })).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
-    expect(screen.getByText(/24 个孔/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /qPCR Helper/i })).toBeInTheDocument();
+    const examples = screen.getByRole("combobox", { name: /示例数据/i });
+    expect(examples).toHaveDisplayValue(/选择合成示例/i);
+    expect(screen.getAllByRole("option")).toHaveLength(7);
+    await user.selectOptions(examples, "multi_gene");
+    expect(screen.getByDisplayValue("多基因表达谱演示")).toBeInTheDocument();
+    expect(screen.getByText(/3 个目标基因/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /English/i }));
-    expect(screen.getByRole("heading", { name: /qPCR Research Platform/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /qPCR Helper/i })).toBeInTheDocument();
   });
 
   it("saves and lists a guest project in the project library", async () => {

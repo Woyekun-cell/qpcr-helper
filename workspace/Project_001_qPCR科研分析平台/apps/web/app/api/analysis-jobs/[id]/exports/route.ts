@@ -73,7 +73,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       status: 200,
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": "attachment; filename=qpcr-research-package.zip",
+        "Content-Disposition": "attachment; filename=qpcr-helper-research-package.zip",
         "Cache-Control": "no-store"
       }
     });

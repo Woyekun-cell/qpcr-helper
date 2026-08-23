@@ -33,7 +33,12 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { defaultAnalysisConfig, type AnalysisRequest } from "@/lib/analysis-request";
-import { createDemoExperiment } from "@/lib/demo";
+import {
+  createDemoExperiment,
+  createExampleExperiment,
+  exampleCatalog,
+  type ExampleId
+} from "@/lib/demo";
 import { guestProjects } from "@/lib/guest-projects";
 import type { GuestProject } from "@/lib/guest-projects";
 import { parseCtText, parseCtWorkbookBundle } from "@/lib/import";
@@ -48,12 +53,14 @@ interface JobReference { id: string; token?: string; expiresAt?: number; exportR
 
 const copy = {
   "zh-CN": {
-    title: "qPCR 科研分析平台",
+    title: "qPCR Helper",
     subtitle: "从 Ct 到可复现结论",
     guest: "游客 · 本地保存",
     signIn: "登录",
     projects: "项目",
     demo: "载入演示",
+    examples: "示例数据",
+    chooseExample: "选择合成示例",
     save: "保存项目",
     steps: ["实验设置", "Ct 数据", "质量控制", "统计方案", "分析结果", "科研绘图", "导出归档"],
     next: "继续",
@@ -82,12 +89,14 @@ const copy = {
     lang: "English"
   },
   en: {
-    title: "qPCR Research Platform",
+    title: "qPCR Helper",
     subtitle: "From Ct values to reproducible evidence",
     guest: "Guest · saved locally",
     signIn: "Sign in",
     projects: "Projects",
     demo: "Load demo",
+    examples: "Example data",
+    chooseExample: "Choose synthetic example",
     save: "Save project",
     steps: ["Experiment", "Ct data", "Quality control", "Statistics", "Results", "Figures", "Export"],
     next: "Continue",
@@ -247,10 +256,23 @@ export function Workbench() {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  function loadExample(exampleId: ExampleId) {
+    const demo = createExampleExperiment(exampleId, locale);
+    const example = exampleCatalog.find((item) => item.id === exampleId);
+    setExperiment(demo);
+    setConfig(defaultAnalysisConfig(demo));
+    setFigureType(example?.figureType ?? "dot");
+    setResult(null);
+    setJob(null);
+    setQcDecisions([]);
+    setMessage("");
+  }
+
   function loadDemo() {
     const demo = createDemoExperiment(locale);
     setExperiment(demo);
     setConfig(defaultAnalysisConfig(demo));
+    setFigureType("dot");
     setResult(null);
     setJob(null);
     setQcDecisions([]);
@@ -506,7 +528,7 @@ export function Workbench() {
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
-      link.download = "qpcr-research-package.zip";
+      link.download = "qpcr-helper-research-package.zip";
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -524,7 +546,7 @@ export function Workbench() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark"><FlaskConical size={18} /></span><div><strong>ΔΔCt Lab</strong><span>{t.subtitle}</span></div></div>
+        <div className="brand"><span className="brand-mark"><FlaskConical size={18} /></span><div><strong>qPCR Helper</strong><span>{t.subtitle}</span></div></div>
         <div className="top-actions">
           <span className="privacy-state"><LockKeyhole size={14} />{userEmail ? (locale === "zh-CN" ? "私有云项目" : "Private cloud") : t.guest}</span>
           <button className="quiet-button" onClick={openLibrary}><FolderOpen size={15} />{t.projects}</button>
@@ -549,7 +571,17 @@ export function Workbench() {
         <section className="work-area">
           <div className="page-heading">
             <div><span className="eyebrow">{t.steps[step]}</span><h1>{t.title}</h1></div>
-            <div className="heading-actions"><button className="quiet-button" onClick={loadDemo}><Sparkles size={15} />{t.demo}</button><button className="quiet-button" onClick={saveProject} disabled={!experiment}><Save size={15} />{t.save}</button></div>
+            <div className="heading-actions">
+              <label className="example-picker">
+                <Sparkles size={15} />
+                <span className="sr-only">{t.examples}</span>
+                <select aria-label={t.examples} value="" onChange={(event) => loadExample(event.target.value as ExampleId)}>
+                  <option value="" disabled>{t.chooseExample}</option>
+                  {exampleCatalog.map((example) => <option key={example.id} value={example.id}>{example.label[locale]}</option>)}
+                </select>
+              </label>
+              <button className="quiet-button" onClick={saveProject} disabled={!experiment}><Save size={15} />{t.save}</button>
+            </div>
           </div>
 
           {step === 0 && <section className="panel setup-panel">
@@ -601,11 +633,11 @@ export function Workbench() {
 
           {step === 6 && <section className="panel">
             <div className="section-intro"><span className="section-number">07</span><div><h2>{t.exportTitle}</h2><p>{locale === "zh-CN" ? "原始/清洗数据、QC、计算链、统计、四种图形格式、R 脚本、sessionInfo、图注、Methods 与校验清单。" : "Raw/clean data, QC, calculations, statistics, four figure formats, R script, sessionInfo, legend, Methods and checksums."}</p></div></div>
-            <div className="export-box"><Download size={26} /><div><h3>qpcr-research-package.zip</h3><p>{job?.expiresAt ? `${locale === "zh-CN" ? "游客下载有效至" : "Guest download expires"} ${new Date(job.expiresAt).toLocaleString(locale)}` : locale === "zh-CN" ? "登录项目由私有存储保留。" : "Signed-in artifacts use private storage."}</p></div><button className="primary-button" onClick={downloadExport} disabled={!job || busy}>{busy ? t.running : t.export}</button></div>
+            <div className="export-box"><Download size={26} /><div><h3>qpcr-helper-research-package.zip</h3><p>{job?.expiresAt ? `${locale === "zh-CN" ? "游客下载有效至" : "Guest download expires"} ${new Date(job.expiresAt).toLocaleString(locale)}` : locale === "zh-CN" ? "登录项目由私有存储保留。" : "Signed-in artifacts use private storage."}</p></div><button className="primary-button" onClick={downloadExport} disabled={!job || busy}>{busy ? t.running : t.export}</button></div>
           </section>}
 
           {message && <div className="status-message" role="status">{message}</div>}
-          {experiment && <div className="dataset-status"><span className="status-dot" />{experiment.wells.length} {t.wells} · {new Set(experiment.wells.map((well) => well.sampleId)).size} {locale === "zh-CN" ? "个样本记录" : "sample records"} · {experiment.targetGenes.length} gene</div>}
+          {experiment && <div className="dataset-status"><span className="status-dot" />{experiment.wells.length} {t.wells} · {new Set(experiment.wells.map((well) => well.sampleId)).size} {locale === "zh-CN" ? "个样本记录" : "sample records"} · {experiment.targetGenes.length} {locale === "zh-CN" ? "个目标基因" : "target genes"}</div>}
           <nav className="page-nav"><button className="quiet-button" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}><ArrowLeft size={16} />{t.back}</button><span>{String(step + 1).padStart(2, "0")} / 07</span><button className="primary-button" onClick={() => setStep(Math.min(6, step + 1))} disabled={step === 6}>{t.next}<ArrowRight size={16} /></button></nav>
         </section>
       </div>

@@ -266,7 +266,7 @@ create_research_export <- function(
     auto_unbox = TRUE
   )
 
-  zip_path <- file.path(destination, "qpcr-research-export.zip")
+  zip_path <- file.path(destination, "qpcr-helper-research-export.zip")
   if (file.exists(zip_path)) unlink(zip_path)
   zip::zipr(zip_path, list.files(bundle_directory, full.names = TRUE), root = bundle_directory)
   list(directory = bundle_directory, zip = zip_path, manifest = manifest)
