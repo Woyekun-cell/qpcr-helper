@@ -84,6 +84,14 @@ preview <- run_preview_payload(list(
 if (!identical(preview$status, "succeeded")) stop("Preview helper did not succeed")
 if (!grepl("<svg", preview$svg, fixed = TRUE)) stop("Preview helper did not return SVG")
 
+nullable_rows <- payload_frame(list(
+  list(contrast = "treated - control", statistic = NULL, p_adjusted = 0.01),
+  list(contrast = "dose - control", statistic = 2.5, p_adjusted = 0.02)
+))
+if (nrow(nullable_rows) != 2 || !is.na(nullable_rows$statistic[1])) {
+  stop("JSON null values must become NA without changing the row count")
+}
+
 export_payload <- list(
   projectName = "Service fixture",
   rawWells = list(

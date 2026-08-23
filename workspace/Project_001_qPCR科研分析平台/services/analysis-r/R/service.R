@@ -4,7 +4,13 @@ rows_to_data_frame <- function(rows) {
   normalized <- lapply(rows, function(row) {
     missing <- setdiff(keys, names(row))
     row[missing] <- NA
-    as.data.frame(row[keys], stringsAsFactors = FALSE)
+    normalized_row <- row[keys]
+    for (key in keys) {
+      if (is.null(normalized_row[[key]]) || length(normalized_row[[key]]) == 0) {
+        normalized_row[[key]] <- NA
+      }
+    }
+    as.data.frame(normalized_row, stringsAsFactors = FALSE)
   })
   data <- do.call(rbind, normalized)
   rownames(data) <- NULL
