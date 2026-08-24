@@ -9,7 +9,7 @@ import {
 import { z } from "zod";
 
 export const figureConfigSchema = z.object({
-  plotType: z.enum(["bar", "dot", "box", "violin", "paired", "time", "heatmap"]),
+  plotType: z.enum(["bar", "dot", "box", "violin", "violin_box", "paired", "time", "heatmap"]),
   widthMm: z.union([z.literal(60), z.literal(75), z.literal(90), z.literal(120), z.literal(150), z.literal(180)]),
   heightMm: z.union([z.literal(60), z.literal(70), z.literal(75), z.literal(90), z.literal(105), z.literal(120)]),
   dpi: z.union([z.literal(300), z.literal(600)]),
@@ -18,12 +18,14 @@ export const figureConfigSchema = z.object({
     "morandi-sage", "morandi-dust", "morandi-blue", "morandi-earth", "morandi-rose", "morandi-lavender", "morandi-forest", "morandi-stone",
     "macaron-pastel", "macaron-candy", "macaron-gelato", "macaron-mint", "macaron-peach", "macaron-sky", "macaron-lilac", "macaron-lemon",
     "okabe-ito", "tol-bright", "cool", "warm", "tol-muted", "ibm-safe", "wong", "tableau-safe",
-    "gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset", "gradient-ocean", "gradient-navy-rose", "gradient-forest-plum", "gradient-gold-indigo",
+    "gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset",
+    "gradient-ocean-multi", "gradient-berry-multi", "gradient-forest-multi", "gradient-sunset-multi",
     "custom"
   ]).default("nature-muted"),
   pLabelMode: z.enum(["stars", "exact", "stars-exact", "none"]).default("stars"),
   showPoints: z.boolean().default(true),
   pointShape: z.enum(["circle", "square", "triangle", "diamond"]).default("circle"),
+  pointSize: z.union([z.literal(1.1), z.literal(1.5), z.literal(1.8), z.literal(2.2)]).default(1.5),
   customColors: z.array(z.string().regex(/^#[0-9A-Fa-f]{6}$/)).min(2).max(8).optional()
 }).superRefine((value, context) => {
   if (value.palette === "custom" && !value.customColors) {

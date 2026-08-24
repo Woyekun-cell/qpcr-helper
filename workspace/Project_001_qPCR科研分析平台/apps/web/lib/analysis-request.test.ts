@@ -88,4 +88,26 @@ describe("analysis API preparation", () => {
     });
     expect(prepared.previewPayload.figure).toMatchObject({ widthMm: 60, pointShape: "triangle" });
   });
+
+  it("accepts the violin-box overlay, point size and a multi-stop continuous gradient", () => {
+    const experiment = createDemoExperiment("en");
+    const prepared = prepareAnalysis({
+      experiment,
+      config: defaultAnalysisConfig(experiment),
+      figure: {
+        plotType: "violin_box",
+        widthMm: 90,
+        heightMm: 70,
+        dpi: 300,
+        palette: "gradient-sunset-multi",
+        pointSize: 2.2,
+        customColors: ["#264653", "#2A9D8F", "#E9C46A", "#E76F51"]
+      }
+    });
+    expect(prepared.previewPayload.figure).toMatchObject({
+      plotType: "violin_box",
+      palette: "gradient-sunset-multi",
+      pointSize: 2.2
+    });
+  });
 });

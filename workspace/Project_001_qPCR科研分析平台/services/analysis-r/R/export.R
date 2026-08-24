@@ -103,6 +103,7 @@ create_research_export <- function(
   p_label_mode = "stars",
   show_points = TRUE,
   point_shape = "circle",
+  point_size = 1.5,
   custom_colors = NULL,
   locale = "en"
 ) {
@@ -191,7 +192,8 @@ create_research_export <- function(
     p_label_mode = p_label_mode,
     show_points = show_points,
     custom_colors = custom_colors,
-    point_shape = point_shape
+    point_shape = point_shape,
+    point_size = point_size
   )
   save_publication_figure(
     plot,
@@ -226,6 +228,7 @@ create_research_export <- function(
       pLabelMode = p_label_mode,
       showPoints = show_points,
       pointShape = point_shape,
+      pointSize = point_size,
       customColors = custom_colors,
       backend = "R"
     )
@@ -250,13 +253,14 @@ create_research_export <- function(
     "source(\"figure_functions.R\")",
     "samples <- read.csv(\"clean_samples.csv\", stringsAsFactors = FALSE)",
     sprintf(
-      "plot <- build_expression_plot(samples, plot_type = \"%s\", confidence_level = %s, contrasts = read.csv(\"contrasts.csv\", stringsAsFactors = FALSE), palette_name = \"%s\", p_label_mode = \"%s\", show_points = %s, point_shape = \"%s\", custom_colors = %s)",
+      "plot <- build_expression_plot(samples, plot_type = \"%s\", confidence_level = %s, contrasts = read.csv(\"contrasts.csv\", stringsAsFactors = FALSE), palette_name = \"%s\", p_label_mode = \"%s\", show_points = %s, point_shape = \"%s\", point_size = %s, custom_colors = %s)",
       plot_type,
       confidence_level,
       palette_name,
       p_label_mode,
       if (show_points) "TRUE" else "FALSE",
       point_shape,
+      point_size,
       if (is.null(custom_colors)) "NULL" else sprintf("c(%s)", paste(sprintf("\"%s\"", custom_colors), collapse = ", "))
     ),
     sprintf(

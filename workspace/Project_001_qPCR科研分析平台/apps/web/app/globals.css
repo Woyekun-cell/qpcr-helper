@@ -197,11 +197,16 @@ tr.excluded { opacity: .5; text-decoration: line-through; }
 .plot-tabs button.selected, .palette-grid button.selected, .palette-categories button.selected, .shape-options button.selected { border-color: var(--moss); box-shadow: inset 0 0 0 1px var(--moss); background: #f2f6f1; }
 .palette-categories { display: flex; gap: 5px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 2px; }
 .palette-categories button { flex: 0 0 auto; min-height: 27px; padding: 4px 7px; color: var(--muted); font-size: 9px; }
-.palette-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-.palette-grid button { padding: 7px; text-align: left; }
-.palette-grid .palette-swatch { height: 13px; display: flex; overflow: hidden; border-radius: 3px; }
+.palette-details { border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.palette-details > summary { min-height: 39px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; font-size: 11px; font-weight: 650; }
+.palette-details > summary .palette-swatch { width: 86px; height: 12px; display: flex; overflow: hidden; border-radius: 3px; }
+.palette-details > summary .palette-swatch i { flex: 1; }
+.palette-editor { padding: 0 8px 9px; border-top: 1px solid var(--line); }
+.palette-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.palette-grid button { padding: 4px; min-width: 0; text-align: left; }
+.palette-grid .palette-swatch { height: 10px; display: flex; overflow: hidden; border-radius: 2px; }
 .palette-grid i { flex: 1; }
-.palette-grid .palette-name { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-grid .palette-name { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shape-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
 .shape-options button { min-height: 47px; padding: 6px 3px; display: grid; place-items: center; gap: 4px; }
 .shape-options button > span { color: var(--muted); font-size: 8px; }
@@ -213,6 +218,11 @@ tr.excluded { opacity: .5; text-decoration: line-through; }
 .custom-colors label { gap: 4px; }
 .custom-colors label > span { font-size: 8px; }
 .custom-colors input[type="color"] { width: 100%; height: 30px; min-height: 30px; padding: 2px; cursor: pointer; }
+.statistics-guide { margin-top: 9px; border-top: 1px solid var(--line); }
+.statistics-guide summary { padding: 8px 0 2px; cursor: pointer; color: var(--moss-dark); font-size: 11px; font-weight: 650; }
+.statistics-guide div { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 5px 14px; padding-top: 7px; }
+.statistics-guide p { margin: 0; display: grid; gap: 1px; font-size: 10px; line-height: 1.45; }
+.statistics-guide p span { color: var(--muted); }
 .custom-color-actions { display: flex; gap: 6px; margin-top: 7px; }
 .custom-color-actions button { min-height: 27px; padding: 4px 8px; color: var(--muted); background: white; border: 1px solid var(--line); border-radius: 4px; font-size: 9px; cursor: pointer; }
 .inspector-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 8px; margin-top: 17px; }

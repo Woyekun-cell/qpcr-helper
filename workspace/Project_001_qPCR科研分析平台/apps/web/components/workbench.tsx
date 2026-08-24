@@ -42,17 +42,19 @@ import { AccountAccess } from "./account-access";
 import { ProjectLibrary, type CloudProject } from "./project-library";
 
 type Locale = "zh-CN" | "en";
-type FigureType = "bar" | "dot" | "box" | "violin" | "paired" | "time" | "heatmap";
+type FigureType = "bar" | "dot" | "violin_box" | "paired" | "time" | "heatmap";
 type FigurePalette =
   | "nature-muted" | "nature-earth" | "cell-bright" | "cell-soft" | "prism" | "nature-cool" | "nature-warm" | "cell-cmy"
   | "morandi-sage" | "morandi-dust" | "morandi-blue" | "morandi-earth" | "morandi-rose" | "morandi-lavender" | "morandi-forest" | "morandi-stone"
   | "macaron-pastel" | "macaron-candy" | "macaron-gelato" | "macaron-mint" | "macaron-peach" | "macaron-sky" | "macaron-lilac" | "macaron-lemon"
   | "okabe-ito" | "tol-bright" | "cool" | "warm" | "tol-muted" | "ibm-safe" | "wong" | "tableau-safe"
-  | "gradient-blue-red" | "gradient-purple-green" | "gradient-teal-coral" | "gradient-sunset" | "gradient-ocean" | "gradient-navy-rose" | "gradient-forest-plum" | "gradient-gold-indigo"
+  | "gradient-blue-red" | "gradient-purple-green" | "gradient-teal-coral" | "gradient-sunset"
+  | "gradient-ocean-multi" | "gradient-berry-multi" | "gradient-forest-multi" | "gradient-sunset-multi"
   | "custom";
 type PaletteCategory = "journal" | "morandi" | "macaron" | "accessible" | "gradient" | "custom";
 type PLabelMode = "stars" | "exact" | "stars-exact" | "none";
 type PointShape = "circle" | "square" | "triangle" | "diamond";
+type PointSize = 1.1 | 1.5 | 1.8 | 2.2;
 type FigureWidth = 60 | 75 | 90 | 120 | 150 | 180;
 type FigureFormat = "svg" | "pdf" | "png" | "tiff";
 interface JobReference { id: string; token?: string; expiresAt?: number; exportRequest?: AnalysisRequest }
@@ -168,7 +170,8 @@ function percentLabel(value: number | undefined): string {
   return `${Math.round((value ?? 0.95) * 100)}%`;
 }
 
-const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; en: string }; options: Array<{ id?: string; value: FigurePalette; label: string; colors: string[] }> }> = [
+type PaletteOption = { id?: string; value: FigurePalette; label: string; colors: string[]; whiteCenter?: boolean };
+const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; en: string }; options: PaletteOption[] }> = [
   { value: "journal", label: { "zh-CN": "期刊风格", en: "Journal" }, options: [
     { value: "nature-muted", label: "Nature muted", colors: ["#4F6B45", "#D98268", "#4C6F91"] },
     { value: "nature-earth", label: "Nature earth", colors: ["#496A4B", "#B7654F", "#4E6F8E"] },
@@ -210,14 +213,14 @@ const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; e
     { value: "tableau-safe", label: "Tableau", colors: ["#4E79A7", "#E15759", "#59A14F"] }
   ] },
   { value: "gradient", label: { "zh-CN": "渐变", en: "Gradient" }, options: [
-    { value: "gradient-blue-red", label: "Blue–red", colors: ["#315B8A", "#B64F4A"] },
-    { value: "gradient-purple-green", label: "Purple–green", colors: ["#6B4C8A", "#4D8B72"] },
-    { value: "gradient-teal-coral", label: "Teal–coral", colors: ["#287D7B", "#D66B5D"] },
-    { value: "gradient-sunset", label: "Sunset", colors: ["#574B90", "#C84A5A"] },
-    { value: "gradient-ocean", label: "Ocean", colors: ["#173F5F", "#80CED7"] },
-    { value: "gradient-navy-rose", label: "Navy–rose", colors: ["#203864", "#C66B7D"] },
-    { value: "gradient-forest-plum", label: "Forest–plum", colors: ["#356859", "#80506B"] },
-    { value: "gradient-gold-indigo", label: "Gold–indigo", colors: ["#B8842F", "#4B4C8A"] }
+    { value: "gradient-blue-red", label: "Blue–red", colors: ["#315B8A", "#B64F4A"], whiteCenter: true },
+    { value: "gradient-purple-green", label: "Purple–green", colors: ["#6B4C8A", "#4D8B72"], whiteCenter: true },
+    { value: "gradient-teal-coral", label: "Teal–coral", colors: ["#287D7B", "#D66B5D"], whiteCenter: true },
+    { value: "gradient-sunset", label: "Sunset diverging", colors: ["#574B90", "#C84A5A"], whiteCenter: true },
+    { value: "gradient-ocean-multi", label: "Ocean multi", colors: ["#14213D", "#2A6F97", "#61A5C2", "#A9D6E5"] },
+    { value: "gradient-berry-multi", label: "Berry multi", colors: ["#3D2C8D", "#7B2CBF", "#C77DFF", "#F4A261"] },
+    { value: "gradient-forest-multi", label: "Forest multi", colors: ["#294C60", "#4F772D", "#90A955", "#E9C46A"] },
+    { value: "gradient-sunset-multi", label: "Sunset multi", colors: ["#264653", "#2A9D8F", "#E9C46A", "#E76F51"] }
   ] },
   { value: "custom", label: { "zh-CN": "自定义", en: "Custom" }, options: [
     { id: "custom-1", value: "custom", label: "Custom 1", colors: ["#496A4B", "#D98268", "#4C6F91", "#D6A43B"] },
@@ -254,37 +257,38 @@ function recommendedFigureType(experiment: ExperimentInput): FigureType {
   return "bar";
 }
 
-function methodOptions(design: AnalysisConfig["design"], contrastMode?: AnalysisConfig["contrastMode"]): Array<{ value: AnalysisConfig["method"]; label: string }> {
+function methodOptions(design: AnalysisConfig["design"], contrastMode: AnalysisConfig["contrastMode"] | undefined, locale: Locale): Array<{ value: AnalysisConfig["method"]; label: string }> {
+  const zh = locale === "zh-CN";
   if (design === "independent_two_group") return [
-    { value: "recommended", label: "Welch t-test" },
-    { value: "mann_whitney", label: "Mann–Whitney" }
+    { value: "recommended", label: zh ? "Welch t-test（独立两组）" : "Welch t-test" },
+    { value: "mann_whitney", label: zh ? "Mann–Whitney（非参数备选）" : "Mann–Whitney" }
   ];
   if (design === "paired_two_group") return [
-    { value: "recommended", label: "Paired t-test" },
-    { value: "wilcoxon", label: "Wilcoxon signed-rank" }
+    { value: "recommended", label: zh ? "配对 t-test" : "Paired t-test" },
+    { value: "wilcoxon", label: zh ? "Wilcoxon signed-rank（非参数备选）" : "Wilcoxon signed-rank" }
   ];
   if (design === "one_way") {
     const options: Array<{ value: AnalysisConfig["method"]; label: string }> = [
-      { value: "recommended", label: "Design-based recommendation" },
-      { value: "welch_anova", label: "Welch ANOVA" },
-      { value: "anova", label: "Equal-variance ANOVA" },
-      { value: "kruskal_wallis", label: "Kruskal–Wallis" }
+      { value: "recommended", label: zh ? "按实验设计推荐" : "Design-based recommendation" },
+      { value: "welch_anova", label: zh ? "Welch ANOVA（不要求等方差）" : "Welch ANOVA" },
+      { value: "anova", label: zh ? "单因素方差分析（方差近似一致）" : "One-way ANOVA (similar variances)" },
+      { value: "kruskal_wallis", label: zh ? "Kruskal–Wallis（非参数备选）" : "Kruskal–Wallis" }
     ];
     return options.filter((option) => contrastMode !== "selected" || option.value !== "kruskal_wallis");
   }
   if (design === "two_way") return [
-    { value: "recommended", label: "Factorial linear model" },
-    { value: "linear_model", label: "Factorial linear model" }
+    { value: "recommended", label: zh ? "两因素线性模型（含交互）" : "Factorial linear model" },
+    { value: "linear_model", label: zh ? "两因素线性模型（含交互）" : "Factorial linear model" }
   ];
   return [
-    { value: "recommended", label: "Mixed model" },
-    { value: "mixed_model", label: "Random-intercept mixed model" }
+    { value: "recommended", label: zh ? "随机截距混合模型" : "Mixed model" },
+    { value: "mixed_model", label: zh ? "随机截距混合模型" : "Random-intercept mixed model" }
   ];
 }
 
-function selectedMethodLabel(config: AnalysisConfig): string {
+function selectedMethodLabel(config: AnalysisConfig, locale: Locale): string {
   if (config.method !== "recommended") {
-    return methodOptions(config.design, config.contrastMode).find((option) => option.value === config.method)?.label.replace(/ · .+$/, "") ?? config.method;
+    return methodOptions(config.design, config.contrastMode, locale).find((option) => option.value === config.method)?.label.replace(/ · .+$/, "") ?? config.method;
   }
   if (config.design === "independent_two_group") return "Welch t-test";
   if (config.design === "paired_two_group") return "Paired t-test";
@@ -295,6 +299,23 @@ function selectedMethodLabel(config: AnalysisConfig): string {
     return "Welch ANOVA + Games–Howell";
   }
   return config.design === "two_way" ? "Linear model + interaction" : "Random-intercept mixed model";
+}
+
+function statisticalGuidance(locale: Locale): Array<{ title: string; detail: string }> {
+  if (locale === "zh-CN") return [
+    { title: "两组独立", detail: "Welch t-test；严重偏态时可复核 Mann–Whitney。" },
+    { title: "两组配对", detail: "配对 t-test；非参数备选 Wilcoxon signed-rank。" },
+    { title: "单因素多组", detail: "方差近似一致：one-way ANOVA + Tukey HSD；方差不齐：Welch ANOVA + Games–Howell；仅和对照比较：Dunnett。" },
+    { title: "两因素", detail: "包含两个主效应及交互项的线性模型。" },
+    { title: "重复测量 / 时间", detail: "受试者随机截距混合模型。" }
+  ];
+  return [
+    { title: "Two independent groups", detail: "Welch t-test; Mann–Whitney as a nonparametric sensitivity analysis." },
+    { title: "Two paired groups", detail: "Paired t-test; Wilcoxon signed-rank as a nonparametric alternative." },
+    { title: "One-way multi-group", detail: "Similar variances: one-way ANOVA + Tukey HSD; unequal variances: Welch ANOVA + Games–Howell; control-only: Dunnett." },
+    { title: "Two-factor", detail: "Linear model with both main effects and their interaction." },
+    { title: "Repeated / time", detail: "Random-intercept mixed model." }
+  ];
 }
 
 function collectOmnibusRows(result: PlatformAnalysisResult | null): Array<Record<string, unknown>> {
@@ -320,6 +341,7 @@ export function Workbench() {
   const [pLabelMode, setPLabelMode] = useState<PLabelMode>("stars");
   const [showPoints, setShowPoints] = useState(true);
   const [pointShape, setPointShape] = useState<PointShape>("circle");
+  const [pointSize, setPointSize] = useState<PointSize>(1.5);
   const [figureWidth, setFigureWidth] = useState<FigureWidth>(90);
   const [figureHeight, setFigureHeight] = useState<60 | 70 | 75 | 90 | 105 | 120>(70);
   const [figureDpi, setFigureDpi] = useState<300 | 600>(300);
@@ -354,8 +376,9 @@ export function Workbench() {
     pLabelMode,
     showPoints,
     pointShape,
-    ...(figurePalette === "custom" ? { customColors } : {})
-  }), [customColors, figureDpi, figureHeight, figurePalette, figureType, figureWidth, pLabelMode, pointShape, showPoints]);
+    pointSize,
+    customColors
+  }), [customColors, figureDpi, figureHeight, figurePalette, figureType, figureWidth, pLabelMode, pointShape, pointSize, showPoints]);
 
   useEffect(() => {
     const client = createSupabaseBrowserClient();
@@ -566,7 +589,7 @@ export function Workbench() {
       id: experiment.projectId,
       name: experiment.name,
       updatedAt: Date.now(),
-      payload: { experiment, config, figureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, pointShape, figureWidth, figureHeight, figureDpi, qcDecisions }
+      payload: { experiment, config, figureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, pointShape, pointSize, figureWidth, figureHeight, figureDpi, qcDecisions }
     });
     setMessage(locale === "zh-CN" ? "已保存到本浏览器。" : "Saved in this browser.");
   }
@@ -589,7 +612,7 @@ export function Workbench() {
   }
 
   function applyStoredProject(payload: unknown) {
-    const stored = payload as { experiment?: unknown; config?: unknown; figureType?: unknown; figurePalette?: unknown; paletteCategory?: unknown; customColors?: unknown; pLabelMode?: unknown; showPoints?: unknown; pointShape?: unknown; figureWidth?: unknown; figureHeight?: unknown; figureDpi?: unknown; qcDecisions?: unknown; result?: unknown };
+    const stored = payload as { experiment?: unknown; config?: unknown; figureType?: unknown; figurePalette?: unknown; paletteCategory?: unknown; customColors?: unknown; pLabelMode?: unknown; showPoints?: unknown; pointShape?: unknown; pointSize?: unknown; figureWidth?: unknown; figureHeight?: unknown; figureDpi?: unknown; qcDecisions?: unknown; result?: unknown };
     const parsedExperiment = experimentInputSchema.safeParse(stored.experiment);
     const parsedConfig = analysisConfigSchema.safeParse(stored.config);
     const parsedDecisions = qcDecisionSchema.array().safeParse(stored.qcDecisions ?? []);
@@ -599,8 +622,8 @@ export function Workbench() {
     }
     setExperiment(parsedExperiment.data);
     setConfig(parsedConfig.data);
-    if (["bar", "dot", "box", "violin", "paired", "time", "heatmap"].includes(String(stored.figureType))) {
-      setFigureType(stored.figureType as FigureType);
+    if (["bar", "dot", "box", "violin", "violin_box", "paired", "time", "heatmap"].includes(String(stored.figureType))) {
+      setFigureType(["box", "violin"].includes(String(stored.figureType)) ? "violin_box" : stored.figureType as FigureType);
     }
     if (paletteGroups.flatMap((group) => group.options.map((item) => item.value)).includes(stored.figurePalette as FigurePalette)) setFigurePalette(stored.figurePalette as FigurePalette);
     if (paletteGroups.some((group) => group.value === stored.paletteCategory)) setPaletteCategory(stored.paletteCategory as PaletteCategory);
@@ -608,6 +631,7 @@ export function Workbench() {
     if (["stars", "exact", "stars-exact", "none"].includes(String(stored.pLabelMode))) setPLabelMode(stored.pLabelMode as PLabelMode);
     if (typeof stored.showPoints === "boolean") setShowPoints(stored.showPoints);
     if (["circle", "square", "triangle", "diamond"].includes(String(stored.pointShape))) setPointShape(stored.pointShape as PointShape);
+    if ([1.1, 1.5, 1.8, 2.2].includes(Number(stored.pointSize))) setPointSize(Number(stored.pointSize) as PointSize);
     if ([60, 75, 90, 120, 150, 180].includes(Number(stored.figureWidth))) setFigureWidth(stored.figureWidth as FigureWidth);
     if ([60, 70, 75, 90, 105, 120].includes(Number(stored.figureHeight))) setFigureHeight(stored.figureHeight as 60 | 70 | 75 | 90 | 105 | 120);
     if (stored.figureDpi === 300 || stored.figureDpi === 600) setFigureDpi(stored.figureDpi);
@@ -692,7 +716,7 @@ export function Workbench() {
       await guestProjects.appendVersion({
         id: activeExperiment.projectId,
         name: activeExperiment.name,
-        payload: { experiment: activeExperiment, config: activeConfig, figureType: activeFigureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, pointShape, figureWidth, figureHeight, figureDpi, qcDecisions, result: completedResult }
+        payload: { experiment: activeExperiment, config: activeConfig, figureType: activeFigureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, pointShape, pointSize, figureWidth, figureHeight, figureDpi, qcDecisions, result: completedResult }
       });
       setStep(destinationStep);
     } catch (error) {
@@ -749,6 +773,22 @@ export function Workbench() {
       setConfig({ ...config, correction, contrastMode: "control", method: "recommended" });
     } else {
       setConfig({ ...config, correction });
+    }
+  }
+
+  function updateMethod(method: AnalysisConfig["method"]) {
+    if (!config) return;
+    if (config.design === "one_way" && method === "recommended") {
+      const correction = config.contrastMode === "control" ? "dunnett" : config.contrastMode === "all_pairs" ? "games-howell" : "holm";
+      setConfig({ ...config, method, correction });
+    } else if (config.design === "one_way" && method === "anova") {
+      setConfig({ ...config, method, contrastMode: "all_pairs", correction: "tukey" });
+    } else if (config.design === "one_way" && method === "welch_anova") {
+      setConfig({ ...config, method, contrastMode: "all_pairs", correction: "games-howell" });
+    } else if (config.design === "one_way" && method === "kruskal_wallis") {
+      setConfig({ ...config, method, contrastMode: "all_pairs", correction: "holm" });
+    } else {
+      setConfig({ ...config, method });
     }
   }
 
@@ -828,12 +868,12 @@ export function Workbench() {
   const availableFigureTypes: Array<{ value: FigureType; label: string }> = [
     { value: "bar", label: locale === "zh-CN" ? "柱 + 点" : "Bar + points" },
     { value: "dot", label: locale === "zh-CN" ? "散点" : "Dot" },
-    { value: "box", label: locale === "zh-CN" ? "箱线" : "Box" },
-    { value: "violin", label: locale === "zh-CN" ? "小提琴" : "Violin" },
+    { value: "violin_box", label: locale === "zh-CN" ? "小提琴 + 箱线" : "Violin + box" },
     ...(experiment?.design === "paired_two_group" ? [{ value: "paired" as const, label: locale === "zh-CN" ? "配对" : "Paired" }] : []),
     ...(experiment?.design === "repeated_time" ? [{ value: "time" as const, label: locale === "zh-CN" ? "时间曲线" : "Time" }] : []),
     ...((experiment?.targetGenes.length ?? 0) > 1 ? [{ value: "heatmap" as const, label: locale === "zh-CN" ? "热图" : "Heatmap" }] : [])
   ];
+  const selectedPalette = paletteGroups.flatMap((group) => group.options).find((item) => item.value === figurePalette);
 
   return (
     <main className="app-shell">
@@ -895,9 +935,10 @@ export function Workbench() {
 
           {step === 1 && <div className="core-stack">
             <section className="panel statistics-panel">
-              <div className="compact-title"><h2>{t.statsTitle}</h2>{config && <strong>{selectedMethodLabel(config)}</strong>}</div>
+              <div className="compact-title"><h2>{t.statsTitle}</h2>{config && <strong>{selectedMethodLabel(config, locale)}</strong>}</div>
               {config ? <div className="recommendation compact-recommendation">
-              <div className="field-grid compact"><label><span>{locale === "zh-CN" ? "统计方法" : "Statistical method"}</span><select value={config.method} onChange={(event) => setConfig({ ...config, method: event.target.value as AnalysisConfig["method"] })}>{methodOptions(config.design, config.contrastMode).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label><span>{locale === "zh-CN" ? "比较范围" : "Contrasts"}</span><select value={config.contrastMode} onChange={(event) => updateContrastMode(event.target.value as AnalysisConfig["contrastMode"])}><option value="selected">Selected</option><option value="control">Control</option><option value="all_pairs">All pairs</option></select></label><label><span>{locale === "zh-CN" ? "多重校正" : "Correction"}</span><select value={config.correction} onChange={(event) => updateCorrection(event.target.value as AnalysisConfig["correction"])}><option value="holm">Holm</option><option value="BH">BH-FDR</option><option value="none">None</option>{config.design === "one_way" && <><option value="dunnett">Dunnett</option><option value="tukey">Tukey</option><option value="games-howell">Games–Howell</option></>}</select></label><label><span>{locale === "zh-CN" ? "显著性水平 α" : "Significance α"}</span><select value={config.alpha} onChange={(event) => setConfig({ ...config, alpha: Number(event.target.value) })}><option value="0.01">0.01</option><option value="0.05">0.05</option><option value="0.1">0.10</option></select></label><label><span>{locale === "zh-CN" ? "置信水平" : "Confidence level"}</span><select value={config.confidenceLevel} onChange={(event) => setConfig({ ...config, confidenceLevel: Number(event.target.value) })}><option value="0.9">90%</option><option value="0.95">95%</option><option value="0.99">99%</option></select></label>{config.design === "one_way" && config.contrastMode === "selected" && <><label><span>Numerator</span><select value={config.selectedComparisons?.[0]?.numerator ?? ""} onChange={(event) => updateSelectedComparison("numerator", event.target.value)}>{experiment?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><label><span>Denominator</span><select value={config.selectedComparisons?.[0]?.denominator ?? ""} onChange={(event) => updateSelectedComparison("denominator", event.target.value)}>{experiment?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label></>}</div>
+              <div className="field-grid compact"><label><span>{locale === "zh-CN" ? "统计方法" : "Statistical method"}</span><select value={config.method} onChange={(event) => updateMethod(event.target.value as AnalysisConfig["method"])}>{methodOptions(config.design, config.contrastMode, locale).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label><span>{locale === "zh-CN" ? "比较范围" : "Contrasts"}</span><select value={config.contrastMode} onChange={(event) => updateContrastMode(event.target.value as AnalysisConfig["contrastMode"])}><option value="selected">{locale === "zh-CN" ? "指定比较" : "Selected"}</option><option value="control">{locale === "zh-CN" ? "仅与对照比较" : "Control only"}</option><option value="all_pairs">{locale === "zh-CN" ? "全部两两比较" : "All pairs"}</option></select></label><label><span>{locale === "zh-CN" ? "多重比较" : "Multiple comparisons"}</span><select value={config.correction} onChange={(event) => updateCorrection(event.target.value as AnalysisConfig["correction"])}><option value="holm">Holm</option><option value="BH">BH-FDR</option><option value="none">None</option>{config.design === "one_way" && <><option value="dunnett">ANOVA + Dunnett</option><option value="tukey">ANOVA + Tukey HSD</option><option value="games-howell">Welch ANOVA + Games–Howell</option></>}</select></label><label><span>{locale === "zh-CN" ? "显著性水平 α" : "Significance α"}</span><select value={config.alpha} onChange={(event) => setConfig({ ...config, alpha: Number(event.target.value) })}><option value="0.01">0.01</option><option value="0.05">0.05</option><option value="0.1">0.10</option></select></label><label><span>{locale === "zh-CN" ? "置信水平" : "Confidence level"}</span><select value={config.confidenceLevel} onChange={(event) => setConfig({ ...config, confidenceLevel: Number(event.target.value) })}><option value="0.9">90%</option><option value="0.95">95%</option><option value="0.99">99%</option></select></label>{config.design === "one_way" && config.contrastMode === "selected" && <><label><span>Numerator</span><select value={config.selectedComparisons?.[0]?.numerator ?? ""} onChange={(event) => updateSelectedComparison("numerator", event.target.value)}>{experiment?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><label><span>Denominator</span><select value={config.selectedComparisons?.[0]?.denominator ?? ""} onChange={(event) => updateSelectedComparison("denominator", event.target.value)}>{experiment?.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label></>}</div>
+                <details className="statistics-guide"><summary>{locale === "zh-CN" ? "怎么选择统计方法" : "How to choose a statistical method"}</summary><div>{statisticalGuidance(locale).map((item) => <p key={item.title}><strong>{item.title}</strong><span>{item.detail}</span></p>)}</div></details>
                 <button className="primary-button run-button" onClick={() => void runAnalysis()} disabled={busy || !localCalculation}><Play size={16} />{busy ? t.running : t.run}</button>
               </div> : <EmptyState text={t.empty} onDemo={loadDemo} label={t.demo} />}
             </section>
@@ -918,9 +959,9 @@ export function Workbench() {
               <aside className="figure-inspector">
                 <div className="inspector-heading"><Palette size={16} /><strong>{locale === "zh-CN" ? "图形设置" : "Figure settings"}</strong></div>
                 <fieldset><legend>{locale === "zh-CN" ? "图形类型" : "Plot type"}</legend><div className="plot-tabs">{availableFigureTypes.map((item) => <button key={item.value} className={figureType === item.value ? "selected" : ""} onClick={() => setFigureType(item.value)}>{item.label}</button>)}</div></fieldset>
-              <fieldset><legend>{locale === "zh-CN" ? "配色" : "Palette"}</legend><div className="palette-categories">{paletteGroups.map((group) => <button key={group.value} className={paletteCategory === group.value ? "selected" : ""} onClick={() => setPaletteCategory(group.value)}>{group.label[locale]}</button>)}</div><div className="palette-grid" role="group" aria-label={locale === "zh-CN" ? "配色方案" : "Palette presets"}>{paletteGroups.find((group) => group.value === paletteCategory)?.options.map((item) => <button key={item.id ?? item.value} aria-label={item.label} className={figurePalette === item.value && (item.value !== "custom" || customColors.join(",") === item.colors.join(",")) ? "selected" : ""} onClick={() => { setFigurePalette(item.value); if (item.value === "custom") setCustomColors(item.colors); }}><PaletteSwatch colors={item.colors} gradient={item.value.startsWith("gradient-")} /><span className="palette-name">{item.label}</span></button>)}</div>{paletteCategory === "custom" && <><div className="custom-colors">{customColors.map((color, index) => <label key={`${index}-${color}`}><span>{locale === "zh-CN" ? `颜色 ${index + 1}` : `Color ${index + 1}`}</span><input type="color" value={color} onChange={(event) => setCustomColors((colors) => colors.map((item, itemIndex) => itemIndex === index ? event.target.value.toUpperCase() : item))} /></label>)}</div><div className="custom-color-actions"><button disabled={customColors.length >= 8} onClick={() => setCustomColors((colors) => [...colors, "#7A8FA6"])}>{locale === "zh-CN" ? "+ 添加颜色" : "+ Add color"}</button><button disabled={customColors.length <= 2} onClick={() => setCustomColors((colors) => colors.slice(0, -1))}>{locale === "zh-CN" ? "− 减少颜色" : "− Remove"}</button></div></>}</fieldset>
+              <details className="palette-details"><summary><span>{locale === "zh-CN" ? "选择与编辑配色" : "Choose and edit palette"}</span><PaletteSwatch colors={customColors} gradient={figurePalette.startsWith("gradient-")} whiteCenter={Boolean(selectedPalette?.whiteCenter)} /></summary><div className="palette-editor"><div className="palette-categories">{paletteGroups.map((group) => <button key={group.value} className={paletteCategory === group.value ? "selected" : ""} onClick={() => setPaletteCategory(group.value)}>{group.label[locale]}</button>)}</div><div className="palette-grid" role="group" aria-label={locale === "zh-CN" ? "配色方案" : "Palette presets"}>{paletteGroups.find((group) => group.value === paletteCategory)?.options.map((item) => <button key={item.id ?? item.value} aria-label={item.label} className={figurePalette === item.value && (item.value !== "custom" || customColors.join(",") === item.colors.join(",")) ? "selected" : ""} onClick={() => { setFigurePalette(item.value); setCustomColors(item.colors); }}><PaletteSwatch colors={item.colors} gradient={item.value.startsWith("gradient-")} whiteCenter={Boolean(item.whiteCenter)} /><span className="palette-name">{item.label}</span></button>)}</div><div className="custom-colors">{customColors.map((color, index) => <label key={`${index}-${color}`}><span>{locale === "zh-CN" ? `颜色 ${index + 1}` : `Color ${index + 1}`}</span><input aria-label={locale === "zh-CN" ? `颜色 ${index + 1}` : `Color ${index + 1}`} type="color" value={color} onChange={(event) => setCustomColors((colors) => colors.map((item, itemIndex) => itemIndex === index ? event.target.value.toUpperCase() : item))} /></label>)}</div><div className="custom-color-actions"><button disabled={customColors.length >= 8} onClick={() => setCustomColors((colors) => [...colors, "#7A8FA6"])}>{locale === "zh-CN" ? "+ 添加颜色" : "+ Add color"}</button><button disabled={customColors.length <= 2} onClick={() => setCustomColors((colors) => colors.slice(0, -1))}>{locale === "zh-CN" ? "− 减少颜色" : "− Remove"}</button></div></div></details>
                 <fieldset><legend>{locale === "zh-CN" ? "样本点形状" : "Point shape"}</legend><div className="shape-options">{pointShapes.map((item) => <button key={item.value} aria-label={item.label[locale]} aria-pressed={pointShape === item.value} className={pointShape === item.value ? "selected" : ""} onClick={() => setPointShape(item.value)}><i className={`shape-${item.value}`} /><span>{item.label[locale]}</span></button>)}</div></fieldset>
-                <div className="inspector-grid"><label><span>{locale === "zh-CN" ? "显著性标注" : "P-value label"}</span><select value={pLabelMode} onChange={(event) => setPLabelMode(event.target.value as PLabelMode)}><option value="stars">* / ** / ***</option><option value="stars-exact">Stars + exact p</option><option value="exact">Exact adjusted p</option><option value="none">None</option></select></label><label><span>{locale === "zh-CN" ? "投稿宽度" : "Width"}</span><select value={figureWidth} onChange={(event) => setFigureWidth(Number(event.target.value) as FigureWidth)}><option value="60">60 mm</option><option value="75">75 mm</option><option value="90">90 mm</option><option value="120">120 mm</option><option value="150">150 mm</option><option value="180">180 mm</option></select></label><label><span>{locale === "zh-CN" ? "投稿高度" : "Height"}</span><select value={figureHeight} onChange={(event) => setFigureHeight(Number(event.target.value) as 60 | 70 | 75 | 90 | 105 | 120)}><option value="60">60 mm</option><option value="70">70 mm</option><option value="75">75 mm</option><option value="90">90 mm</option><option value="105">105 mm</option><option value="120">120 mm</option></select></label><label className="check-control"><input type="checkbox" checked={showPoints} onChange={(event) => setShowPoints(event.target.checked)} /><span>{locale === "zh-CN" ? "显示独立样本点" : "Show individual points"}</span></label></div>
+                <div className="inspector-grid"><label><span>{locale === "zh-CN" ? "显著性标注" : "P-value label"}</span><select value={pLabelMode} onChange={(event) => setPLabelMode(event.target.value as PLabelMode)}><option value="stars">* / ** / ***</option><option value="stars-exact">Stars + exact p</option><option value="exact">Exact adjusted p</option><option value="none">None</option></select></label><label><span>{locale === "zh-CN" ? "样本点大小" : "Point size"}</span><select value={pointSize} onChange={(event) => setPointSize(Number(event.target.value) as PointSize)}><option value="1.1">{locale === "zh-CN" ? "小" : "Small"}</option><option value="1.5">{locale === "zh-CN" ? "标准" : "Standard"}</option><option value="1.8">{locale === "zh-CN" ? "大" : "Large"}</option><option value="2.2">{locale === "zh-CN" ? "特大" : "Extra large"}</option></select></label><label><span>{locale === "zh-CN" ? "投稿宽度" : "Width"}</span><select value={figureWidth} onChange={(event) => setFigureWidth(Number(event.target.value) as FigureWidth)}><option value="60">60 mm</option><option value="75">75 mm</option><option value="90">90 mm</option><option value="120">120 mm</option><option value="150">150 mm</option><option value="180">180 mm</option></select></label><label><span>{locale === "zh-CN" ? "投稿高度" : "Height"}</span><select value={figureHeight} onChange={(event) => setFigureHeight(Number(event.target.value) as 60 | 70 | 75 | 90 | 105 | 120)}><option value="60">60 mm</option><option value="70">70 mm</option><option value="75">75 mm</option><option value="90">90 mm</option><option value="105">105 mm</option><option value="120">120 mm</option></select></label><label className="check-control"><input type="checkbox" checked={showPoints} onChange={(event) => setShowPoints(event.target.checked)} /><span>{locale === "zh-CN" ? "显示独立样本点" : "Show individual points"}</span></label></div>
                 <div className="figure-download"><label><span>{locale === "zh-CN" ? "文件格式" : "File format"}</span><select value={figureFormat} onChange={(event) => setFigureFormat(event.target.value as FigureFormat)}><option value="svg">SVG</option><option value="pdf">PDF</option><option value="png">PNG</option><option value="tiff">TIFF</option></select></label><label><span>{locale === "zh-CN" ? "下载分辨率" : "Download DPI"}</span><select value={figureDpi} disabled={figureFormat === "svg" || figureFormat === "pdf"} onChange={(event) => setFigureDpi(Number(event.target.value) as 300 | 600)}><option value="300">300 dpi</option><option value="600">600 dpi</option></select></label><button className="primary-button" onClick={() => void downloadFigure()} disabled={!result || busy}><Download size={16} />{locale === "zh-CN" ? "下载图形" : "Download figure"}</button></div>
                 <details className="package-details"><summary>{locale === "zh-CN" ? "完整科研包（可选）" : "Research package (optional)"}</summary><button className="quiet-button" onClick={downloadExport} disabled={!job || busy}><Download size={15} />{t.export}</button></details>
               </aside>
@@ -939,9 +980,11 @@ function EmptyState({ text, onDemo, label }: { text: string; onDemo: () => void 
   return <div className="empty-state"><FlaskConical size={30} /><p>{text}</p><button className="primary-button" onClick={() => void onDemo()}>{label}</button></div>;
 }
 
-function PaletteSwatch({ colors, gradient }: { colors: string[]; gradient: boolean }) {
+function PaletteSwatch({ colors, gradient, whiteCenter = false }: { colors: string[]; gradient: boolean; whiteCenter?: boolean }) {
   if (gradient) {
-    return <span className="palette-swatch" style={{ background: `linear-gradient(90deg, ${colors[0]} 0%, #FFFFFF 50%, ${colors[1]} 100%)` }} />;
+    const stops = whiteCenter ? [colors[0], "#FFFFFF", colors.at(-1)!] : colors;
+    const background = stops.map((color, index) => `${color} ${Math.round(index * 100 / (stops.length - 1))}%`).join(", ");
+    return <span className="palette-swatch" style={{ background: `linear-gradient(90deg, ${background})` }} />;
   }
   return <span className="palette-swatch">{colors.map((color) => <i key={color} style={{ background: color }} />)}</span>;
 }

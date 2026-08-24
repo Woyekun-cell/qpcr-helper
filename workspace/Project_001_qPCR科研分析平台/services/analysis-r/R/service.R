@@ -160,6 +160,7 @@ prepare_figure_payload <- function(payload) {
   p_label_mode <- if (is.null(figure$pLabelMode)) "stars" else as.character(figure$pLabelMode)
   show_points <- if (is.null(figure$showPoints)) TRUE else isTRUE(figure$showPoints)
   point_shape <- if (is.null(figure$pointShape)) "circle" else as.character(figure$pointShape)
+  point_size <- if (is.null(figure$pointSize)) 1.5 else as.numeric(figure$pointSize)
   custom_colors <- if (is.null(figure$customColors)) NULL else as.character(unlist(figure$customColors))
   analysis <- if (is.null(payload$analysis)) list() else payload$analysis
   contrasts <- payload_frame(analysis$contrasts)
@@ -173,7 +174,8 @@ prepare_figure_payload <- function(payload) {
     p_label_mode = p_label_mode,
     show_points = show_points,
     custom_colors = custom_colors,
-    point_shape = point_shape
+    point_shape = point_shape,
+    point_size = point_size
   )
   list(
     plot = plot,
@@ -250,6 +252,7 @@ run_export_payload <- function(payload, destination = tempfile("qpcr-export-")) 
     p_label_mode = if (is.null(figure$pLabelMode)) "stars" else as.character(figure$pLabelMode),
     show_points = if (is.null(figure$showPoints)) TRUE else isTRUE(figure$showPoints),
     point_shape = if (is.null(figure$pointShape)) "circle" else as.character(figure$pointShape),
+    point_size = if (is.null(figure$pointSize)) 1.5 else as.numeric(figure$pointSize),
     custom_colors = if (is.null(figure$customColors)) NULL else as.character(unlist(figure$customColors)),
     locale = if (is.null(payload$locale)) "en" else as.character(payload$locale)
   )

@@ -68,8 +68,7 @@ if (!"GeomErrorbar" %in% bar_geoms) stop("Bar plot must include confidence inter
 if (!all(c("GeomSegment", "GeomText") %in% bar_geoms)) stop("Bar plot must include significance brackets and labels")
 point_layer <- bar_plot$layers[[which(bar_geoms == "GeomPoint")[1]]]
 if (!identical(point_layer$aes_params$shape, 21)) stop("Independent points must use a filled shape with a visible outline")
-if (point_layer$aes_params$size > 1.4) stop("Independent points must remain compact")
-if (point_layer$aes_params$size < 1.3) stop("Independent points must remain clearly visible")
+if (!identical(point_layer$aes_params$size, 1.5)) stop("Independent points must use the standard configurable size")
 error_layer <- bar_plot$layers[[which(bar_geoms == "GeomErrorbar")[1]]]
 if (error_layer$aes_params$linewidth > 0.32) stop("Error bars must use a fine publication-weight line")
 text_layers <- bar_plot$layers[bar_geoms == "GeomText"]
@@ -82,13 +81,19 @@ square_geoms <- vapply(square_plot$layers, function(layer) class(layer$geom)[1],
 square_points <- square_plot$layers[[which(square_geoms == "GeomPoint")[1]]]
 if (!identical(square_points$aes_params$shape, 22)) stop("Square point selection must reach the R layer")
 
-for (plot_kind in c("dot", "box", "violin")) {
+for (plot_kind in c("dot", "violin_box")) {
   annotated_plot <- build_expression_plot(samples, plot_type = plot_kind, contrasts = contrast)
   annotated_geoms <- vapply(annotated_plot$layers, function(layer) class(layer$geom)[1], character(1))
   if (!all(c("GeomSegment", "GeomText") %in% annotated_geoms)) {
     stop(sprintf("%s plot must display significance annotations", plot_kind))
   }
 }
+
+violin_box_plot <- build_expression_plot(samples, plot_type = "violin_box", point_size = 2.2)
+violin_box_geoms <- vapply(violin_box_plot$layers, function(layer) class(layer$geom)[1], character(1))
+if (!all(c("GeomViolin", "GeomBoxplot") %in% violin_box_geoms)) stop("Violin-box plots must overlay both distributions and quartiles")
+violin_box_points <- violin_box_plot$layers[[which(violin_box_geoms == "GeomPoint")[1]]]
+if (!identical(violin_box_points$aes_params$size, 2.2)) stop("Configured point size must reach the R plot layer")
 
 paired <- samples
 paired$subjectId <- rep(c("subject-1", "subject-2", "subject-3"), 2)
@@ -125,9 +130,21 @@ if (!inherits(multi_gene_dot$facet, "FacetWrap")) stop("Multi-gene dot plots mus
 if (!identical(multi_gene_dot$theme$strip.text$face, "italic")) stop("Faceted gene names must be italic")
 if (!identical(unname(heatmap@row_names_param$gp$font), 3L)) stop("Heatmap gene names must be italic")
 
+multi_gene_bar <- build_expression_plot(heat_samples, plot_type = "bar", palette_name = "custom", custom_colors = c("#264653", "#E76F51"))
+multi_gene_bar_scale <- multi_gene_bar$scales$get_scales("fill")
+multi_gene_bar_colors <- multi_gene_bar_scale$palette(4)
+if (length(unique(multi_gene_bar_colors)) != 4) stop("Multi-gene bars must receive a non-repeating graduated color per displayed series")
+if (!identical(unname(toupper(multi_gene_bar_colors)), c("#264653", "#665352", "#A66151", "#E76F51"))) {
+  stop("Multi-gene bar colors must progress continuously from the first stop to the last")
+}
+
 gradient_heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap", palette_name = "gradient-blue-red")
 gradient_colors <- toupper(gradient_heatmap@matrix_color_mapping@colors)
 if (!any(grepl("#FFFFFF", gradient_colors, fixed = TRUE))) stop("Diverging gradients must have a white midpoint")
+
+continuous_heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap", palette_name = "gradient-sunset-multi")
+continuous_colors <- toupper(continuous_heatmap@matrix_color_mapping@colors)
+if (any(grepl("#FFFFFF", continuous_colors, fixed = TRUE))) stop("Continuous multi-stop gradients must not force a white midpoint")
 
 legend <- build_figure_legend(
   samples = samples,

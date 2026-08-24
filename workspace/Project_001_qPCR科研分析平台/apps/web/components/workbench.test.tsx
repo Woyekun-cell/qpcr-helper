@@ -111,6 +111,7 @@ describe("qPCR workbench", () => {
     expect(screen.getByRole("button", { name: /圆形点/i })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: /三角形点/i }));
     expect(screen.getByRole("button", { name: /三角形点/i })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByText(/选择与编辑配色/i));
     await user.click(screen.getByRole("button", { name: /渐变/i }));
     expect(screen.getByRole("button", { name: "Blue–red" }).querySelector("span"))
       .toHaveStyle({ background: "linear-gradient(90deg, #315B8A 0%, #FFFFFF 50%, #B64F4A 100%)" });
@@ -129,10 +130,54 @@ describe("qPCR workbench", () => {
     const user = userEvent.setup();
     render(<Workbench />);
     await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+    await user.click(screen.getByText(/选择与编辑配色/i));
     for (const category of ["期刊风格", "莫兰迪", "马卡龙", "通用安全", "渐变", "自定义"]) {
       await user.click(screen.getByRole("button", { name: category }));
       expect(within(screen.getByRole("group", { name: /配色方案/i })).getAllByRole("button")).toHaveLength(8);
     }
+  });
+
+  it("explains when Tukey applies and exposes it for a one-way design", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+    await user.selectOptions(screen.getByRole("combobox", { name: /实验设计/i }), "one_way");
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+    expect(within(screen.getByRole("combobox", { name: /统计方法/i })).getByRole("option", { name: /单因素方差分析.*方差近似一致/i })).toBeInTheDocument();
+    expect(within(screen.getByRole("combobox", { name: /多重比较/i })).getByRole("option", { name: /Tukey HSD/i })).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: /统计方法/i }), "anova");
+    expect(screen.getByRole("combobox", { name: /多重比较/i })).toHaveValue("tukey");
+    await user.selectOptions(screen.getByRole("combobox", { name: /统计方法/i }), "recommended");
+    expect(screen.getByRole("combobox", { name: /多重比较/i })).toHaveValue("games-howell");
+    await user.click(screen.getByText(/怎么选择统计方法/i));
+    expect(screen.getByText((_, element) => element?.tagName === "P" && Boolean(element.textContent?.match(/单因素多组.*ANOVA.*Tukey HSD.*方差不齐.*Games–Howell/i)))).toBeInTheDocument();
+  });
+
+  it("uses one violin-box plot and controls point visibility and size", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+    expect(screen.getByRole("button", { name: /小提琴.*箱线/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^箱线$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^小提琴$/i })).not.toBeInTheDocument();
+    const points = screen.getByRole("checkbox", { name: /显示独立样本点/i });
+    expect(points).toBeChecked();
+    await user.click(points);
+    expect(points).not.toBeChecked();
+    await user.selectOptions(screen.getByRole("combobox", { name: /样本点大小/i }), "2.2");
+    expect(screen.getByRole("combobox", { name: /样本点大小/i })).toHaveValue("2.2");
+  });
+
+  it("keeps palette choices collapsed and lets every preset expose editable multi-color stops", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+    const paletteDetails = screen.getByText(/选择与编辑配色/i).closest("details");
+    expect(paletteDetails).not.toHaveAttribute("open");
+    await user.click(screen.getByText(/选择与编辑配色/i));
+    await user.click(screen.getByRole("button", { name: /渐变/i }));
+    await user.click(screen.getByRole("button", { name: /Sunset multi/i }));
+    expect(screen.getAllByLabelText(/颜色 \d+/i).length).toBeGreaterThanOrEqual(4);
   });
 
   it("offers direct figure format and raster DPI controls without requiring a ZIP", async () => {

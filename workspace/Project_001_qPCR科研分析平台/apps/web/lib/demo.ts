@@ -10,7 +10,7 @@ export type ExampleId =
   | "time_course"
   | "multi_gene";
 
-export type ExampleFigureType = "bar" | "dot" | "violin" | "paired" | "time" | "heatmap";
+export type ExampleFigureType = "bar" | "dot" | "violin_box" | "paired" | "time" | "heatmap";
 
 interface LocalizedText {
   "zh-CN": string;

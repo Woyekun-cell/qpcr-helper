@@ -29,10 +29,10 @@ qpcr_palettes <- list(
   `gradient-purple-green` = c("#6B4C8A", "#4D8B72"),
   `gradient-teal-coral` = c("#287D7B", "#D66B5D"),
   `gradient-sunset` = c("#574B90", "#C84A5A"),
-  `gradient-ocean` = c("#173F5F", "#80CED7"),
-  `gradient-navy-rose` = c("#203864", "#C66B7D"),
-  `gradient-forest-plum` = c("#356859", "#80506B"),
-  `gradient-gold-indigo` = c("#B8842F", "#4B4C8A"),
+  `gradient-ocean-multi` = c("#14213D", "#2A6F97", "#61A5C2", "#A9D6E5"),
+  `gradient-berry-multi` = c("#3D2C8D", "#7B2CBF", "#C77DFF", "#F4A261"),
+  `gradient-forest-multi` = c("#294C60", "#4F772D", "#90A955", "#E9C46A"),
+  `gradient-sunset-multi` = c("#264653", "#2A9D8F", "#E9C46A", "#E76F51"),
   cool = c("#2F5D8A", "#5A8BB5", "#63A7A3", "#8CB9A8", "#8073AC", "#B2ABD2", "#6B7280"),
   warm = c("#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55"),
   `tol-muted` = c("#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77", "#CC6677"),
@@ -46,11 +46,13 @@ qpcr_palette_families <- list(
   morandi = c("morandi-sage", "morandi-dust", "morandi-blue", "morandi-earth", "morandi-rose", "morandi-lavender", "morandi-forest", "morandi-stone"),
   macaron = c("macaron-pastel", "macaron-candy", "macaron-gelato", "macaron-mint", "macaron-peach", "macaron-sky", "macaron-lilac", "macaron-lemon"),
   accessible = c("okabe-ito", "tol-bright", "cool", "warm", "tol-muted", "ibm-safe", "wong", "tableau-safe"),
-  gradient = c("gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset", "gradient-ocean", "gradient-navy-rose", "gradient-forest-plum", "gradient-gold-indigo")
+  gradient = c("gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset", "gradient-ocean-multi", "gradient-berry-multi", "gradient-forest-multi", "gradient-sunset-multi")
 )
 
+white_center_palettes <- c("gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset")
+
 resolve_palette_values <- function(palette_name, custom_colors = NULL) {
-  palette <- if (identical(palette_name, "custom")) custom_colors else qpcr_palettes[[palette_name]]
+  palette <- if (!is.null(custom_colors)) custom_colors else qpcr_palettes[[palette_name]]
   if (is.null(palette)) stop(sprintf("Unknown figure palette: %s", palette_name))
   if (length(palette) < 2 || any(!grepl("^#[0-9A-Fa-f]{6}$", palette))) stop("Figure palettes require at least two hex colors")
   palette
@@ -58,7 +60,13 @@ resolve_palette_values <- function(palette_name, custom_colors = NULL) {
 
 resolve_palette <- function(palette_name, groups, custom_colors = NULL) {
   palette <- resolve_palette_values(palette_name, custom_colors)
-  stats::setNames(rep(palette, length.out = length(groups)), groups)
+  count <- length(groups)
+  values <- if (count <= length(palette) && !startsWith(palette_name, "gradient-")) {
+    palette[seq_len(count)]
+  } else {
+    grDevices::colorRampPalette(palette)(count)
+  }
+  stats::setNames(values, groups)
 }
 
 resolve_point_shape <- function(point_shape = "circle") {
@@ -183,7 +191,7 @@ significance_annotations <- function(samples, contrasts, mode = "stars") {
 
 build_expression_plot <- function(
   samples,
-  plot_type = c("bar", "dot", "box", "violin", "paired", "time", "heatmap"),
+  plot_type = c("bar", "dot", "violin_box", "paired", "time", "heatmap", "box", "violin"),
   title = NULL,
   confidence_level = 0.95,
   contrasts = NULL,
@@ -191,10 +199,13 @@ build_expression_plot <- function(
   p_label_mode = "stars",
   show_points = TRUE,
   custom_colors = NULL,
-  point_shape = "circle"
+  point_shape = "circle",
+  point_size = 1.5
 ) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Figures require ggplot2")
   plot_type <- match.arg(plot_type)
+  if (plot_type %in% c("box", "violin")) plot_type <- "violin_box"
+  if (length(point_size) != 1 || !is.finite(point_size) || point_size < 0.5 || point_size > 4) stop("point_size must be between 0.5 and 4")
   validate_figure_samples(samples, plot_type)
   samples$groupId <- factor(samples$groupId, levels = unique(as.character(samples$groupId)))
   palette_values <- resolve_palette_values(palette_name, custom_colors)
@@ -216,12 +227,13 @@ build_expression_plot <- function(
     }
     limit <- max(abs(matrix_data), na.rm = TRUE)
     if (!is.finite(limit) || limit == 0) limit <- 1
-    heat_colors <- c(palette_values[1], "#FFFFFF", palette_values[2])
+    heat_colors <- if (palette_name %in% white_center_palettes) c(palette_values[1], "#FFFFFF", palette_values[length(palette_values)]) else palette_values
+    heat_breaks <- seq(-limit, limit, length.out = length(heat_colors))
     return(
       ComplexHeatmap::Heatmap(
         matrix_data,
         name = "log2 FC",
-        col = circlize::colorRamp2(c(-limit, 0, limit), heat_colors),
+        col = circlize::colorRamp2(heat_breaks, heat_colors),
         cluster_rows = nrow(matrix_data) >= 3,
         cluster_columns = FALSE,
         row_names_gp = grid::gpar(fontfamily = "Helvetica", fontsize = 6.5, fontface = "italic"),
@@ -241,7 +253,7 @@ build_expression_plot <- function(
     summary_data <- group_interval(samples, summary_columns, confidence_level)
     time_plot <- ggplot2::ggplot(samples, ggplot2::aes(x = time, y = foldChange, colour = groupId)) +
         ggplot2::geom_line(ggplot2::aes(group = subjectId), linewidth = 0.3, alpha = 0.25) +
-        ggplot2::geom_point(shape = resolve_point_shape(point_shape), size = 1.35, stroke = 0.28, fill = "white", alpha = 0.85) +
+        ggplot2::geom_point(shape = resolve_point_shape(point_shape), size = point_size, stroke = 0.28, fill = "white", alpha = 0.85) +
         ggplot2::geom_line(
           data = summary_data,
           ggplot2::aes(x = time, y = center, group = groupId),
@@ -266,22 +278,30 @@ build_expression_plot <- function(
   summary_columns <- if (multiple_genes) c("targetGene", "groupId") else "groupId"
   summary_data <- group_interval(samples, summary_columns, confidence_level)
   group_labels <- stats::setNames(levels(samples$groupId), levels(samples$groupId))
+  samples$seriesId <- if (multiple_genes) factor(
+    paste(samples$targetGene, samples$groupId, sep = " · "),
+    levels = unique(paste(samples$targetGene, samples$groupId, sep = " · "))
+  ) else samples$groupId
+  summary_data$seriesId <- if (multiple_genes) factor(
+    paste(summary_data$targetGene, summary_data$groupId, sep = " · "),
+    levels = levels(samples$seriesId)
+  ) else summary_data$groupId
+  fill_colors <- if (plot_type == "bar") resolve_palette(palette_name, levels(samples$seriesId), custom_colors) else colors
   plot <- ggplot2::ggplot(samples, ggplot2::aes(x = groupId, y = foldChange))
   if (plot_type == "bar") {
     plot <- plot + ggplot2::geom_col(
       data = summary_data,
-      ggplot2::aes(x = groupId, y = center, fill = groupId),
+      ggplot2::aes(x = groupId, y = center, fill = seriesId),
       width = 0.62,
       colour = "#262824",
       linewidth = 0.28,
       alpha = 0.88
     )
   }
-  if (plot_type == "box") {
-    plot <- plot + ggplot2::geom_boxplot(width = 0.5, outlier.shape = NA, linewidth = 0.4, colour = "#575B54", fill = NA)
-  }
-  if (plot_type == "violin") {
-    plot <- plot + ggplot2::geom_violin(width = 0.72, linewidth = 0.35, alpha = 0.16, trim = FALSE)
+  if (plot_type == "violin_box") {
+    plot <- plot +
+      ggplot2::geom_violin(ggplot2::aes(fill = groupId), width = 0.78, linewidth = 0.3, alpha = 0.2, trim = FALSE) +
+      ggplot2::geom_boxplot(width = 0.22, outlier.shape = NA, linewidth = 0.35, colour = "#363A35", fill = "white", alpha = 0.72)
   }
   if (plot_type == "paired") {
     plot <- plot + ggplot2::geom_line(
@@ -292,13 +312,14 @@ build_expression_plot <- function(
     )
   }
   if (show_points) {
+    point_fill_mapping <- if (plot_type == "bar") ggplot2::aes(fill = seriesId) else ggplot2::aes(fill = groupId)
     plot <- plot + ggplot2::geom_point(
-      ggplot2::aes(fill = groupId),
+      mapping = point_fill_mapping,
       position = ggplot2::position_jitter(width = 0.052, height = 0, seed = 104),
       shape = resolve_point_shape(point_shape),
       colour = "#262824",
       stroke = 0.28,
-      size = 1.35,
+      size = point_size,
       alpha = 0.92
     )
   }
@@ -312,7 +333,7 @@ build_expression_plot <- function(
       colour = "#1E211D",
       na.rm = TRUE
     ) +
-    ggplot2::scale_fill_manual(values = colors) +
+    ggplot2::scale_fill_manual(values = fill_colors) +
     ggplot2::scale_x_discrete(labels = group_labels) +
     ggplot2::labs(x = NULL, y = "Relative expression", title = title) +
     theme_qpcr_nature()
