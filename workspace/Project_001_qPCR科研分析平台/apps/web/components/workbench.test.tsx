@@ -176,7 +176,11 @@ describe("qPCR workbench", () => {
     expect(paletteDetails).not.toHaveAttribute("open");
     await user.click(screen.getByText(/选择与编辑配色/i));
     await user.click(screen.getByRole("button", { name: /渐变/i }));
-    await user.click(screen.getByRole("button", { name: /Sunset multi/i }));
+    const blueSequential = screen.getByRole("button", { name: /Blue sequential/i });
+    expect(blueSequential.querySelector("span")).toHaveStyle({
+      background: "linear-gradient(90deg, #E8F1F8 0%, #B9D3E6 33%, #6FA6C9 67%, #255F85 100%)"
+    });
+    await user.click(blueSequential);
     expect(screen.getAllByLabelText(/颜色 \d+/i).length).toBeGreaterThanOrEqual(4);
   });
 

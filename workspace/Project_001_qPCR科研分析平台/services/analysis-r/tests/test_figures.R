@@ -138,6 +138,24 @@ if (!identical(unname(toupper(multi_gene_bar_colors)), c("#264653", "#665352", "
   stop("Multi-gene bar colors must progress continuously from the first stop to the last")
 }
 
+scrambled_multi_gene <- heat_samples[c(1, 7, 4, 10, 2, 8, 5, 11, 3, 9, 6, 12), ]
+scrambled_multi_gene$targetGene <- sub("GENE1", "ZETA", sub("GENE2", "ALPHA", scrambled_multi_gene$targetGene))
+left_to_right_bar <- build_expression_plot(
+  scrambled_multi_gene,
+  plot_type = "bar",
+  palette_name = "custom",
+  custom_colors = c("#EEF4F8", "#214F73")
+)
+left_to_right_build <- ggplot2::ggplot_build(left_to_right_bar)
+left_to_right_limits <- left_to_right_build$plot$scales$get_scales("fill")$get_limits()
+expected_series_order <- c("ZETA · control", "ZETA · treated", "ALPHA · control", "ALPHA · treated")
+if (!identical(left_to_right_limits, expected_series_order)) {
+  stop("Multi-gene colors must follow the visible left-to-right facet and group order")
+}
+if (!identical(levels(left_to_right_build$plot$data$targetGene), c("ZETA", "ALPHA"))) {
+  stop("Multi-gene facet order must preserve the visible input order used by color mapping")
+}
+
 gradient_heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap", palette_name = "gradient-blue-red")
 gradient_colors <- toupper(gradient_heatmap@matrix_color_mapping@colors)
 if (!any(grepl("#FFFFFF", gradient_colors, fixed = TRUE))) stop("Diverging gradients must have a white midpoint")
@@ -145,6 +163,14 @@ if (!any(grepl("#FFFFFF", gradient_colors, fixed = TRUE))) stop("Diverging gradi
 continuous_heatmap <- build_expression_plot(heat_samples, plot_type = "heatmap", palette_name = "gradient-sunset-multi")
 continuous_colors <- toupper(continuous_heatmap@matrix_color_mapping@colors)
 if (any(grepl("#FFFFFF", continuous_colors, fixed = TRUE))) stop("Continuous multi-stop gradients must not force a white midpoint")
+
+for (palette_name in c("gradient-ocean-multi", "gradient-berry-multi", "gradient-forest-multi", "gradient-sunset-multi")) {
+  sequential_rgb <- grDevices::col2rgb(qpcr_palettes[[palette_name]]) / 255
+  sequential_hsv <- grDevices::rgb2hsv(sequential_rgb)
+  hue_distance <- outer(sequential_hsv[1, ], sequential_hsv[1, ], function(left, right) pmin(abs(left - right), 1 - abs(left - right)))
+  if (max(hue_distance) > 0.08) stop(sprintf("%s must remain within one hue family", palette_name))
+  if (!all(diff(sequential_hsv[3, ]) < 0)) stop(sprintf("%s must progress from light to dark", palette_name))
+}
 
 legend <- build_figure_legend(
   samples = samples,

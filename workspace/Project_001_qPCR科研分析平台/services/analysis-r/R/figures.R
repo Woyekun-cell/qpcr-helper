@@ -29,10 +29,10 @@ qpcr_palettes <- list(
   `gradient-purple-green` = c("#6B4C8A", "#4D8B72"),
   `gradient-teal-coral` = c("#287D7B", "#D66B5D"),
   `gradient-sunset` = c("#574B90", "#C84A5A"),
-  `gradient-ocean-multi` = c("#14213D", "#2A6F97", "#61A5C2", "#A9D6E5"),
-  `gradient-berry-multi` = c("#3D2C8D", "#7B2CBF", "#C77DFF", "#F4A261"),
-  `gradient-forest-multi` = c("#294C60", "#4F772D", "#90A955", "#E9C46A"),
-  `gradient-sunset-multi` = c("#264653", "#2A9D8F", "#E9C46A", "#E76F51"),
+  `gradient-ocean-multi` = c("#E8F1F8", "#B9D3E6", "#6FA6C9", "#255F85"),
+  `gradient-berry-multi` = c("#F2EAF6", "#D7BDE2", "#A778BC", "#6A3F86"),
+  `gradient-forest-multi` = c("#E8F2EB", "#B9D6C1", "#74AA83", "#3E7050"),
+  `gradient-sunset-multi` = c("#FCEBE4", "#F5C4B2", "#E98768", "#B94F3F"),
   cool = c("#2F5D8A", "#5A8BB5", "#63A7A3", "#8CB9A8", "#8073AC", "#B2ABD2", "#6B7280"),
   warm = c("#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55"),
   `tol-muted` = c("#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77", "#CC6677"),
@@ -208,6 +208,7 @@ build_expression_plot <- function(
   if (length(point_size) != 1 || !is.finite(point_size) || point_size < 0.5 || point_size > 4) stop("point_size must be between 0.5 and 4")
   validate_figure_samples(samples, plot_type)
   samples$groupId <- factor(samples$groupId, levels = unique(as.character(samples$groupId)))
+  samples$targetGene <- factor(samples$targetGene, levels = unique(as.character(samples$targetGene)))
   palette_values <- resolve_palette_values(palette_name, custom_colors)
   colors <- group_colors(samples, palette_name, custom_colors)
   title <- title %||% ""
@@ -278,10 +279,12 @@ build_expression_plot <- function(
   summary_columns <- if (multiple_genes) c("targetGene", "groupId") else "groupId"
   summary_data <- group_interval(samples, summary_columns, confidence_level)
   group_labels <- stats::setNames(levels(samples$groupId), levels(samples$groupId))
-  samples$seriesId <- if (multiple_genes) factor(
-    paste(samples$targetGene, samples$groupId, sep = " · "),
-    levels = unique(paste(samples$targetGene, samples$groupId, sep = " · "))
-  ) else samples$groupId
+  visible_series <- paste(samples$targetGene, samples$groupId, sep = " · ")
+  series_levels <- unlist(lapply(levels(samples$targetGene), function(gene) {
+    candidates <- paste(gene, levels(samples$groupId), sep = " · ")
+    candidates[candidates %in% visible_series]
+  }), use.names = FALSE)
+  samples$seriesId <- if (multiple_genes) factor(visible_series, levels = series_levels) else samples$groupId
   summary_data$seriesId <- if (multiple_genes) factor(
     paste(summary_data$targetGene, summary_data$groupId, sep = " · "),
     levels = levels(samples$seriesId)

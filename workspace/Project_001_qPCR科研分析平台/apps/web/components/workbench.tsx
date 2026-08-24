@@ -217,10 +217,10 @@ const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; e
     { value: "gradient-purple-green", label: "Purple–green", colors: ["#6B4C8A", "#4D8B72"], whiteCenter: true },
     { value: "gradient-teal-coral", label: "Teal–coral", colors: ["#287D7B", "#D66B5D"], whiteCenter: true },
     { value: "gradient-sunset", label: "Sunset diverging", colors: ["#574B90", "#C84A5A"], whiteCenter: true },
-    { value: "gradient-ocean-multi", label: "Ocean multi", colors: ["#14213D", "#2A6F97", "#61A5C2", "#A9D6E5"] },
-    { value: "gradient-berry-multi", label: "Berry multi", colors: ["#3D2C8D", "#7B2CBF", "#C77DFF", "#F4A261"] },
-    { value: "gradient-forest-multi", label: "Forest multi", colors: ["#294C60", "#4F772D", "#90A955", "#E9C46A"] },
-    { value: "gradient-sunset-multi", label: "Sunset multi", colors: ["#264653", "#2A9D8F", "#E9C46A", "#E76F51"] }
+    { value: "gradient-ocean-multi", label: "Blue sequential", colors: ["#E8F1F8", "#B9D3E6", "#6FA6C9", "#255F85"] },
+    { value: "gradient-berry-multi", label: "Purple sequential", colors: ["#F2EAF6", "#D7BDE2", "#A778BC", "#6A3F86"] },
+    { value: "gradient-forest-multi", label: "Green sequential", colors: ["#E8F2EB", "#B9D6C1", "#74AA83", "#3E7050"] },
+    { value: "gradient-sunset-multi", label: "Coral sequential", colors: ["#FCEBE4", "#F5C4B2", "#E98768", "#B94F3F"] }
   ] },
   { value: "custom", label: { "zh-CN": "自定义", en: "Custom" }, options: [
     { id: "custom-1", value: "custom", label: "Custom 1", colors: ["#496A4B", "#D98268", "#4C6F91", "#D6A43B"] },
