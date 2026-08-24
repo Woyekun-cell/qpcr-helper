@@ -65,13 +65,13 @@ describe("qPCR workbench", () => {
     expect(method).toHaveValue("mann_whitney");
   });
 
-  it("lets researchers choose ACTB and rename target genes and groups", async () => {
+  it("lets researchers choose beta-actin and rename target genes and groups", async () => {
     const user = userEvent.setup();
     render(<Workbench />);
     await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
     const reference = screen.getByRole("combobox", { name: /内参基因/i });
-    await user.selectOptions(reference, "ACTB");
-    expect(reference).toHaveValue("ACTB");
+    await user.selectOptions(reference, "β-actin");
+    expect(reference).toHaveValue("β-actin");
     expect(screen.getByText(/Reference/)).toBeInTheDocument();
 
     const target = screen.getByRole("textbox", { name: /目标基因 1/i });
@@ -85,6 +85,19 @@ describe("qPCR workbench", () => {
     await user.type(firstGroup, "Vehicle");
     await user.tab();
     expect(firstGroup).toHaveValue("Vehicle");
+  });
+
+  it("shows a three-column Ct summary and keeps well-level details collapsed", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+    await user.click(screen.getByRole("button", { name: /Ct 数据/i }));
+    const summary = screen.getByRole("table", { name: /Ct 数据概览/i });
+    expect(within(summary).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "基因名", "重复数", "分组"
+    ]);
+    const details = screen.getByText(/逐孔 Ct 明细/i).closest("details");
+    expect(details).not.toHaveAttribute("open");
   });
 
   it("offers sub-90-mm widths, gradient swatches and selectable point shapes", async () => {

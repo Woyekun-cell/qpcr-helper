@@ -151,7 +151,7 @@ function pairedExample(locale: Locale): ExperimentInput {
   const response = [1.7, 1.8, 1.9, 2.1, 2.2, 2.3];
   return experiment("paired_response", locale, {
     name: locale === "zh-CN" ? "配对干预前后演示" : "Paired before-after demo",
-    referenceGene: "ACTB",
+    referenceGene: "β-actin",
     targetGenes: ["GENE1"],
     design: "paired_two_group",
     groups: [

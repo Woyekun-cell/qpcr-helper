@@ -210,7 +210,7 @@ const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; e
 
 const referenceGeneOptions = [
   { value: "GAPDH", label: "GAPDH" },
-  { value: "ACTB", label: "ACTB (β-actin)" },
+  { value: "β-actin", label: "β-actin" },
   { value: "RPLP0", label: "RPLP0" },
   { value: "HPRT1", label: "HPRT1" },
   { value: "TBP", label: "TBP" },
@@ -852,7 +852,10 @@ export function Workbench() {
             <div className="section-intro"><span className="section-number">02</span><div><h2>{t.importTitle}</h2><p>{t.importHint}</p></div></div>
             <textarea className="data-paste" value={paste} onChange={(event) => setPaste(event.target.value)} spellCheck={false} />
             <div className="inline-actions"><button className="quiet-button" onClick={parsePaste}><FileSpreadsheet size={16} />{t.parse}</button><button className="quiet-button" onClick={() => fileRef.current?.click()}><Upload size={16} />CSV / XLSX</button><button className="primary-button" onClick={() => void analyzePastedData()} disabled={busy}><Play size={16} />{locale === "zh-CN" ? "一键分析并出图" : "Analyze & plot"}</button><input ref={fileRef} hidden type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></div>
-            {experiment && <DataTable wells={experiment.wells} onToggle={updateWell} locale={locale} />}
+            {experiment && <>
+              <CtSummaryTable experiment={experiment} locale={locale} onReferenceChange={renameReferenceGene} onTargetChange={renameTargetGene} onGroupChange={renameGroup} />
+              <details className="well-details"><summary>{locale === "zh-CN" ? "逐孔 Ct 明细与 QC" : "Well-level Ct details and QC"}</summary><DataTable wells={experiment.wells} onToggle={updateWell} locale={locale} /></details>
+            </>}
           </section>}
 
           {step === 2 && <section className="panel">
@@ -960,6 +963,40 @@ function ExperimentDesignTable({
       </tr>;
     })}</tbody></table></div>
   </div>;
+}
+
+function CtSummaryTable({
+  experiment,
+  locale,
+  onReferenceChange,
+  onTargetChange,
+  onGroupChange
+}: {
+  experiment: ExperimentInput;
+  locale: Locale;
+  onReferenceChange: (gene: string) => void;
+  onTargetChange: (previous: string, next: string) => void;
+  onGroupChange: (previous: string, next: string) => void;
+}) {
+  const rows = experiment.groups.flatMap((group) => [experiment.referenceGene, ...experiment.targetGenes].flatMap((gene) => {
+    const wells = experiment.wells.filter((well) => well.groupId === group.id && well.gene === gene);
+    if (wells.length === 0) return [];
+    return [{
+      gene,
+      groupId: group.id,
+      reference: gene === experiment.referenceGene,
+      replicates: new Set(wells.map((well) => well.biologicalReplicateId)).size
+    }];
+  }));
+  return <div className="table-wrap compact-data-table"><table aria-label={locale === "zh-CN" ? "Ct 数据概览" : "Ct data overview"}><thead><tr>
+    <th>{locale === "zh-CN" ? "基因名" : "Gene"}</th>
+    <th>{locale === "zh-CN" ? "重复数" : "Replicates"}</th>
+    <th>{locale === "zh-CN" ? "分组" : "Group"}</th>
+  </tr></thead><tbody>{rows.map((row) => <tr key={`${row.groupId}-${row.gene}`}>
+    <td><div className="compact-gene"><EditableText value={row.gene} ariaLabel={`${locale === "zh-CN" ? "基因名" : "Gene"} ${row.gene} ${row.groupId}`} onCommit={(next) => row.reference ? onReferenceChange(next) : onTargetChange(row.gene, next)} />{row.reference && <span>Reference</span>}</div></td>
+    <td><output>{row.replicates}</output></td>
+    <td><EditableText value={row.groupId} ariaLabel={`${locale === "zh-CN" ? "分组" : "Group"} ${row.groupId} ${row.gene}`} onCommit={(next) => onGroupChange(row.groupId, next)} /></td>
+  </tr>)}</tbody></table></div>;
 }
 
 function Metric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {

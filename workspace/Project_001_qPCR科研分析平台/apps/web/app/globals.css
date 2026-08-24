@@ -102,6 +102,18 @@ h1 { font-size: clamp(27px, 3vw, 36px); line-height: 1.08; letter-spacing: -.03e
 .design-table output { display: inline-grid; place-items: center; min-width: 34px; min-height: 34px; border: 1px solid var(--line); border-radius: 5px; background: #f8f9f7; font-weight: 700; }
 .group-name { display: flex; align-items: center; gap: 8px; }
 .group-name span { flex: 0 0 auto; padding: 4px 7px; color: var(--moss-dark); background: #eaf0e9; border-radius: 99px; font-size: 9px; font-weight: 700; }
+.compact-data-table { max-height: 300px; }
+.compact-data-table th:nth-child(1) { width: 46%; }
+.compact-data-table th:nth-child(2) { width: 18%; text-align: center; }
+.compact-data-table td:nth-child(2) { text-align: center; }
+.compact-data-table input { min-height: 34px; padding: 7px 9px; font-style: italic; }
+.compact-data-table output { font-weight: 700; }
+.compact-gene { display: flex; align-items: center; gap: 8px; }
+.compact-gene span { flex: 0 0 auto; padding: 4px 7px; color: white; background: var(--moss); border-radius: 99px; font-size: 8px; font-weight: 800; letter-spacing: .05em; }
+.well-details { margin-top: 12px; border: 1px solid var(--line); border-radius: 5px; background: #fafbf9; }
+.well-details summary { padding: 11px 13px; color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; }
+.well-details[open] summary { border-bottom: 1px solid var(--line); }
+.well-details .table-wrap { margin: 0; border: 0; border-radius: 0; }
 label { display: grid; gap: 7px; }
 label > span { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
 input, select, textarea, .readonly-field { width: 100%; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; padding: 10px 11px; min-height: 40px; }
