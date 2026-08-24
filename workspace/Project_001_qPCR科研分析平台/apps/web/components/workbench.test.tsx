@@ -14,7 +14,7 @@ describe("qPCR workbench", () => {
     expect(screen.getAllByRole("option")).toHaveLength(7);
     await user.selectOptions(examples, "multi_gene");
     expect(screen.getByDisplayValue("多基因表达谱演示")).toBeInTheDocument();
-    expect(screen.getByText(/3 个目标基因/)).toBeInTheDocument();
+    expect(screen.getAllByRole("textbox", { name: /目标基因/i })).toHaveLength(3);
     await user.click(screen.getByRole("button", { name: /English/i }));
     expect(screen.getByRole("heading", { name: /qPCR Helper/i })).toBeInTheDocument();
   });
@@ -53,7 +53,7 @@ describe("qPCR workbench", () => {
     const user = userEvent.setup();
     render(<Workbench />);
     await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
-    await user.click(screen.getByRole("button", { name: /统计方案/i }));
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
     const alpha = screen.getByRole("combobox", { name: /显著性水平/i });
     const confidence = screen.getByRole("combobox", { name: /置信水平/i });
     const method = screen.getByRole("combobox", { name: /统计方法/i });
@@ -72,7 +72,7 @@ describe("qPCR workbench", () => {
     const reference = screen.getByRole("combobox", { name: /内参基因/i });
     await user.selectOptions(reference, "β-actin");
     expect(reference).toHaveValue("β-actin");
-    expect(screen.getByText(/Reference/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Reference/).length).toBeGreaterThan(0);
 
     const target = screen.getByRole("textbox", { name: /目标基因 1/i });
     await user.clear(target);
@@ -91,7 +91,6 @@ describe("qPCR workbench", () => {
     const user = userEvent.setup();
     render(<Workbench />);
     await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
-    await user.click(screen.getByRole("button", { name: /Ct 数据/i }));
     const summary = screen.getByRole("table", { name: /Ct 数据概览/i });
     expect(within(summary).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "基因名", "重复数", "分组"
@@ -103,7 +102,7 @@ describe("qPCR workbench", () => {
   it("offers sub-90-mm widths, gradient swatches and selectable point shapes", async () => {
     const user = userEvent.setup();
     render(<Workbench />);
-    await user.click(screen.getByRole("button", { name: /科研绘图/i }));
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
     const width = screen.getByRole("combobox", { name: /投稿宽度/i });
     expect(within(width).getByRole("option", { name: "60 mm" })).toBeInTheDocument();
     expect(within(width).getByRole("option", { name: "75 mm" })).toBeInTheDocument();
@@ -115,5 +114,36 @@ describe("qPCR workbench", () => {
     await user.click(screen.getByRole("button", { name: /渐变/i }));
     expect(screen.getByRole("button", { name: "Blue–red" }).querySelector("span"))
       .toHaveStyle({ background: "linear-gradient(90deg, #315B8A 0%, #FFFFFF 50%, #B64F4A 100%)" });
+  });
+
+  it("keeps only the data and analysis core views without explanatory workflow copy", async () => {
+    render(<Workbench />);
+    expect(screen.getByRole("button", { name: /^数据录入$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^分析与作图$/i })).toBeInTheDocument();
+    expect(screen.queryByText(/01—07/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/统计推荐需人工确认/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\* < 0\.05/)).not.toBeInTheDocument();
+  });
+
+  it("provides eight presets in every scientific palette family", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+    for (const category of ["期刊风格", "莫兰迪", "马卡龙", "通用安全", "渐变", "自定义"]) {
+      await user.click(screen.getByRole("button", { name: category }));
+      expect(within(screen.getByRole("group", { name: /配色方案/i })).getAllByRole("button")).toHaveLength(8);
+    }
+  });
+
+  it("offers direct figure format and raster DPI controls without requiring a ZIP", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+    const format = screen.getByRole("combobox", { name: /文件格式/i });
+    expect(within(format).getAllByRole("option").map((option) => option.textContent)).toEqual(["SVG", "PDF", "PNG", "TIFF"]);
+    await user.selectOptions(format, "png");
+    expect(screen.getByRole("combobox", { name: /下载分辨率/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^下载图形$/i })).toBeInTheDocument();
+    expect(screen.getByText(/完整科研包（可选）/i).closest("details")).not.toHaveAttribute("open");
   });
 });

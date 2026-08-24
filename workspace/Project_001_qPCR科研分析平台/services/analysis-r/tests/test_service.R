@@ -84,6 +84,17 @@ preview <- run_preview_payload(list(
 if (!identical(preview$status, "succeeded")) stop("Preview helper did not succeed")
 if (!grepl("<svg", preview$svg, fixed = TRUE)) stop("Preview helper did not return SVG")
 
+direct_payload <- list(
+  samples = samples,
+  config = payload$config,
+  figure = list(plotType = "dot", widthMm = 75, heightMm = 60, dpi = 600),
+  analysis = list(contrasts = list()),
+  format = "png"
+)
+direct_figure <- run_figure_export_payload(direct_payload, destination = tempfile("service-figure-"))
+if (!identical(direct_figure$content_type, "image/png")) stop("Direct figure helper returned the wrong MIME type")
+if (!file.exists(direct_figure$path) || file.info(direct_figure$path)$size <= 1000) stop("Direct figure helper did not create a PNG")
+
 nullable_rows <- payload_frame(list(
   list(contrast = "treated - control", statistic = NULL, p_adjusted = 0.01),
   list(contrast = "dose - control", statistic = 2.5, p_adjusted = 0.02)

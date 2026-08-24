@@ -73,6 +73,28 @@ function(req, res) {
   )
 }
 
+#* Render one publication figure in the requested format
+#* @post /v1/figure
+#* @serializer contentType list(type="application/octet-stream")
+function(req, res) {
+  temporary <- tempfile("qpcr-figure-api-")
+  dir.create(temporary)
+  on.exit(unlink(temporary, recursive = TRUE, force = TRUE), add = TRUE)
+  tryCatch({
+    artifact <- run_figure_export_payload(parse_request_json(req), destination = temporary)
+    res$setHeader("Content-Type", artifact$content_type)
+    res$setHeader("Content-Disposition", paste0("attachment; filename=qpcr-helper-figure.", artifact$format))
+    size <- file.info(artifact$path)$size
+    connection <- file(artifact$path, "rb")
+    on.exit(close(connection), add = TRUE)
+    readBin(connection, what = "raw", n = size)
+  }, error = function(error) {
+    res$status <- 422L
+    res$setHeader("Content-Type", "application/json; charset=utf-8")
+    charToRaw(jsonlite::toJSON(list(status = "failed", error = conditionMessage(error)), auto_unbox = TRUE))
+  })
+}
+
 #* Build a complete research export ZIP
 #* @post /v1/export
 #* @serializer contentType list(type="application/zip")

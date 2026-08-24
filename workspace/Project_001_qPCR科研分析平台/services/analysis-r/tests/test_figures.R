@@ -4,6 +4,12 @@ setwd(service_root)
 
 source(file.path("R", "figures.R"))
 
+for (family in c("journal", "morandi", "macaron", "accessible", "gradient")) {
+  if (length(qpcr_palette_families[[family]]) != 8) {
+    stop(sprintf("Palette family %s must expose exactly eight presets", family))
+  }
+}
+
 samples <- data.frame(
   sampleId = c("c1", "c2", "c3", "t1", "t2", "t3"),
   biologicalReplicateId = c("c1", "c2", "c3", "t1", "t2", "t3"),
@@ -157,5 +163,14 @@ if (!grepl("<text", svg_text, fixed = TRUE)) stop("SVG text must remain editable
 inline_svg <- render_publication_svg(dot_plot, width_mm = 90, height_mm = 70)
 if (!grepl("<svg", inline_svg, fixed = TRUE)) stop("Inline preview must be SVG")
 if (!grepl("<text", inline_svg, fixed = TRUE)) stop("Inline preview text must remain editable")
+
+single_png <- tempfile("qpcr-single-", fileext = ".png")
+save_publication_format(dot_plot, single_png, format = "png", width_mm = 75, height_mm = 60, dpi = 600)
+if (!file.exists(single_png) || file.info(single_png)$size <= 1000) stop("Direct PNG export must create a non-empty file")
+invalid_format <- tryCatch({
+  save_publication_format(dot_plot, tempfile(), format = "jpg")
+  NA_character_
+}, error = function(error) conditionMessage(error))
+if (!identical(invalid_format, "Unsupported figure format: jpg")) stop("Direct export must reject unsupported formats")
 
 cat("figure tests passed\n")

@@ -14,11 +14,12 @@ export const figureConfigSchema = z.object({
   heightMm: z.union([z.literal(60), z.literal(70), z.literal(75), z.literal(90), z.literal(105), z.literal(120)]),
   dpi: z.union([z.literal(300), z.literal(600)]),
   palette: z.enum([
-    "nature-muted", "nature-earth", "cell-bright", "cell-soft", "prism",
-    "okabe-ito", "tol-bright", "morandi-sage", "morandi-dust", "morandi-blue", "morandi-earth",
-    "macaron-pastel", "macaron-candy", "macaron-gelato",
-    "gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset", "gradient-ocean",
-    "cool", "warm", "custom"
+    "nature-muted", "nature-earth", "cell-bright", "cell-soft", "prism", "nature-cool", "nature-warm", "cell-cmy",
+    "morandi-sage", "morandi-dust", "morandi-blue", "morandi-earth", "morandi-rose", "morandi-lavender", "morandi-forest", "morandi-stone",
+    "macaron-pastel", "macaron-candy", "macaron-gelato", "macaron-mint", "macaron-peach", "macaron-sky", "macaron-lilac", "macaron-lemon",
+    "okabe-ito", "tol-bright", "cool", "warm", "tol-muted", "ibm-safe", "wong", "tableau-safe",
+    "gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset", "gradient-ocean", "gradient-navy-rose", "gradient-forest-plum", "gradient-gold-indigo",
+    "custom"
   ]).default("nature-muted"),
   pLabelMode: z.enum(["stars", "exact", "stars-exact", "none"]).default("stars"),
   showPoints: z.boolean().default(true),

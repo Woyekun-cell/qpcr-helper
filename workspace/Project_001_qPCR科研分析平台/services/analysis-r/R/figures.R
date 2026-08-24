@@ -4,22 +4,49 @@ qpcr_palettes <- list(
   `cell-bright` = c("#3B82B5", "#E0764C", "#50A56C", "#D6A43B", "#9A6EB4", "#45A3A5", "#C95B76"),
   `cell-soft` = c("#5B7FA3", "#C9826A", "#719477", "#C2A15D", "#8C789D", "#6B9998", "#B77783"),
   prism = c("#3B75AF", "#E06B65", "#59A14F", "#F0A43A", "#8B6BB1", "#4FA3A5", "#9A6A4F"),
+  `nature-cool` = c("#355F8A", "#5C8D89", "#8A789E", "#6F93B0", "#84A8A2", "#A396B1", "#5D6E78"),
+  `nature-warm` = c("#A65F46", "#C48B4E", "#7B8061", "#B8785E", "#D0A267", "#929679", "#795D53"),
+  `cell-cmy` = c("#2698BA", "#D45C91", "#D7A928", "#50B6B1", "#8A75B8", "#E37A58", "#66727C"),
   `okabe-ito` = c("#0072B2", "#D55E00", "#009E73", "#E69F00", "#CC79A7", "#56B4E9", "#000000"),
   `tol-bright` = c("#4477AA", "#EE6677", "#228833", "#CCBB44", "#AA3377", "#66CCEE", "#BBBBBB"),
   `morandi-sage` = c("#7E8B76", "#B8897D", "#8091A0", "#A59B79", "#8E8294", "#75928F", "#9A9189"),
   `morandi-dust` = c("#9C7F7B", "#B59A8B", "#7D8C91", "#9A9277", "#8B7D86", "#708681", "#A6A09A"),
   `morandi-blue` = c("#667C8A", "#8EA0AA", "#9A7E79", "#7F9082", "#91869B", "#A69B82", "#7A7774"),
   `morandi-earth` = c("#897568", "#A98576", "#6F8179", "#9A906F", "#7E7480", "#A3988F", "#696D68"),
+  `morandi-rose` = c("#A48282", "#C0A0A0", "#7E8E91", "#9D8B79", "#867D90", "#859B91", "#A39B96"),
+  `morandi-lavender` = c("#817A91", "#A49AAD", "#788B87", "#9B897C", "#77899A", "#A39880", "#757572"),
+  `morandi-forest` = c("#64766B", "#879388", "#9B8274", "#7B8794", "#958A9A", "#A59B7C", "#70736E"),
+  `morandi-stone` = c("#777B78", "#9C9990", "#7D8991", "#9B807B", "#858094", "#778F88", "#A49A80"),
   `macaron-pastel` = c("#8EC5E8", "#F3A6A0", "#9ED9B5", "#F3D58A", "#C6A8E0", "#91D5D2", "#F1B3CF"),
   `macaron-candy` = c("#69B7EB", "#FF8F86", "#76D39B", "#FFD36E", "#B995E4", "#65CECC", "#F38FB5"),
   `macaron-gelato` = c("#A7C7E7", "#F4B6A8", "#B7D7B0", "#F2D49B", "#C9B5D9", "#A6D5D2", "#E9B7C7"),
+  `macaron-mint` = c("#87D8C1", "#A7CFE8", "#F2B4B0", "#EBD68C", "#C7B0E2", "#8FD7D5", "#E8B8D0"),
+  `macaron-peach` = c("#F3B59D", "#F2CF91", "#9CCDBB", "#91BFE2", "#C8AFE2", "#E89CB7", "#BBD69A"),
+  `macaron-sky` = c("#83C7EA", "#A9BCE8", "#F0A8B8", "#A1D7BF", "#E9D17C", "#C7AFE6", "#83D3D0"),
+  `macaron-lilac` = c("#C4A7E7", "#F0B6D2", "#9FD3CE", "#9FC7E8", "#E9D589", "#A8D39F", "#F0AE9D"),
+  `macaron-lemon` = c("#EFD675", "#A7D8A2", "#94C8E8", "#F0AAA4", "#C7AFE8", "#87D3CA", "#E5B4D1"),
   `gradient-blue-red` = c("#315B8A", "#B64F4A"),
   `gradient-purple-green` = c("#6B4C8A", "#4D8B72"),
   `gradient-teal-coral` = c("#287D7B", "#D66B5D"),
   `gradient-sunset` = c("#574B90", "#C84A5A"),
   `gradient-ocean` = c("#173F5F", "#80CED7"),
+  `gradient-navy-rose` = c("#203864", "#C66B7D"),
+  `gradient-forest-plum` = c("#356859", "#80506B"),
+  `gradient-gold-indigo` = c("#B8842F", "#4B4C8A"),
   cool = c("#2F5D8A", "#5A8BB5", "#63A7A3", "#8CB9A8", "#8073AC", "#B2ABD2", "#6B7280"),
-  warm = c("#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55")
+  warm = c("#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55"),
+  `tol-muted` = c("#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77", "#CC6677"),
+  `ibm-safe` = c("#648FFF", "#DC267F", "#785EF0", "#FE6100", "#FFB000", "#3D8D7A", "#6F6F6F"),
+  wong = c("#0072B2", "#D55E00", "#009E73", "#E69F00", "#CC79A7", "#56B4E9", "#000000"),
+  `tableau-safe` = c("#4E79A7", "#E15759", "#59A14F", "#F28E2B", "#B07AA1", "#76B7B2", "#9C755F")
+)
+
+qpcr_palette_families <- list(
+  journal = c("nature-muted", "nature-earth", "cell-bright", "cell-soft", "prism", "nature-cool", "nature-warm", "cell-cmy"),
+  morandi = c("morandi-sage", "morandi-dust", "morandi-blue", "morandi-earth", "morandi-rose", "morandi-lavender", "morandi-forest", "morandi-stone"),
+  macaron = c("macaron-pastel", "macaron-candy", "macaron-gelato", "macaron-mint", "macaron-peach", "macaron-sky", "macaron-lilac", "macaron-lemon"),
+  accessible = c("okabe-ito", "tol-bright", "cool", "warm", "tol-muted", "ibm-safe", "wong", "tableau-safe"),
+  gradient = c("gradient-blue-red", "gradient-purple-green", "gradient-teal-coral", "gradient-sunset", "gradient-ocean", "gradient-navy-rose", "gradient-forest-plum", "gradient-gold-indigo")
 )
 
 resolve_palette_values <- function(palette_name, custom_colors = NULL) {
@@ -378,6 +405,35 @@ render_publication_svg <- function(plot, width_mm = 90, height_mm = 70) {
   paste(readLines(output, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
 }
 
+save_publication_format <- function(plot, path, format, width_mm = 90, height_mm = 70, dpi = 300) {
+  format <- tolower(as.character(format))
+  if (!format %in% c("svg", "pdf", "png", "tiff")) stop(sprintf("Unsupported figure format: %s", format))
+  if (!is.finite(dpi) || !dpi %in% c(300, 600)) stop("Figure DPI must be 300 or 600")
+  if (format == "svg" && !requireNamespace("svglite", quietly = TRUE)) stop("SVG export requires svglite")
+  if (format %in% c("png", "tiff") && !requireNamespace("ragg", quietly = TRUE)) stop("Raster export requires ragg")
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  width <- width_mm / 25.4
+  height <- height_mm / 25.4
+  opened <- FALSE
+  on.exit(if (opened) grDevices::dev.off(), add = TRUE)
+
+  if (format == "svg") svglite::svglite(path, width = width, height = height)
+  if (format == "pdf") {
+    if (identical(Sys.info()[["sysname"]], "Darwin") && capabilities("aqua")) {
+      grDevices::quartz(type = "pdf", file = path, width = width, height = height, family = "Helvetica")
+    } else {
+      grDevices::cairo_pdf(path, width = width, height = height, family = "Helvetica")
+    }
+  }
+  if (format == "png") ragg::agg_png(path, width = width, height = height, units = "in", res = dpi)
+  if (format == "tiff") ragg::agg_tiff(path, width = width, height = height, units = "in", res = dpi, compression = "lzw")
+  opened <- TRUE
+  draw_publication_plot(plot)
+  grDevices::dev.off()
+  opened <- FALSE
+  invisible(path)
+}
+
 save_publication_figure <- function(plot, file_stem, width_mm = 90, height_mm = 70, dpi = 300) {
   required <- c("svglite", "ragg")
   missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]
@@ -389,34 +445,9 @@ save_publication_figure <- function(plot, file_stem, width_mm = 90, height_mm = 
     tiff = paste0(file_stem, ".tiff"),
     png = paste0(file_stem, ".png")
   )
-  width <- width_mm / 25.4
-  height <- height_mm / 25.4
-
-  svglite::svglite(paths$svg, width = width, height = height)
-  draw_publication_plot(plot)
-  grDevices::dev.off()
-
-  if (identical(Sys.info()[["sysname"]], "Darwin") && capabilities("aqua")) {
-    grDevices::quartz(
-      type = "pdf",
-      file = paths$pdf,
-      width = width,
-      height = height,
-      family = "Helvetica"
-    )
-  } else {
-    grDevices::cairo_pdf(paths$pdf, width = width, height = height, family = "Helvetica")
+  for (format in names(paths)) {
+    save_publication_format(plot, paths[[format]], format, width_mm = width_mm, height_mm = height_mm, dpi = dpi)
   }
-  draw_publication_plot(plot)
-  grDevices::dev.off()
-
-  ragg::agg_tiff(paths$tiff, width = width, height = height, units = "in", res = dpi, compression = "lzw")
-  draw_publication_plot(plot)
-  grDevices::dev.off()
-
-  ragg::agg_png(paths$png, width = width, height = height, units = "in", res = dpi)
-  draw_publication_plot(plot)
-  grDevices::dev.off()
 
   paths
 }

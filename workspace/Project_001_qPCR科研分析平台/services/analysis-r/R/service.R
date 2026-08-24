@@ -144,7 +144,7 @@ derive_fold_change <- function(samples, calibrator_group) {
   samples
 }
 
-run_preview_payload <- function(payload) {
+prepare_figure_payload <- function(payload) {
   if (!is.list(payload)) stop("request body must be a JSON object")
   config <- payload$config
   if (is.null(config) || !is.list(config)) stop("config is required")
@@ -176,14 +176,44 @@ run_preview_payload <- function(payload) {
     point_shape = point_shape
   )
   list(
-    status = "succeeded",
-    backend = if (identical(plot_type, "heatmap")) "R/ComplexHeatmap" else "R/ggplot2",
-    plotType = plot_type,
-    palette = palette_name,
-    widthMm = width_mm,
-    heightMm = height_mm,
-    svg = render_publication_svg(plot, width_mm = width_mm, height_mm = height_mm)
+    plot = plot,
+    plot_type = plot_type,
+    width_mm = width_mm,
+    height_mm = height_mm,
+    dpi = if (is.null(figure$dpi)) 300 else as.numeric(figure$dpi),
+    palette_name = palette_name
   )
+}
+
+run_preview_payload <- function(payload) {
+  prepared <- prepare_figure_payload(payload)
+  list(
+    status = "succeeded",
+    backend = if (identical(prepared$plot_type, "heatmap")) "R/ComplexHeatmap" else "R/ggplot2",
+    plotType = prepared$plot_type,
+    palette = prepared$palette_name,
+    widthMm = prepared$width_mm,
+    heightMm = prepared$height_mm,
+    svg = render_publication_svg(prepared$plot, width_mm = prepared$width_mm, height_mm = prepared$height_mm)
+  )
+}
+
+run_figure_export_payload <- function(payload, destination = tempfile("qpcr-figure-")) {
+  prepared <- prepare_figure_payload(payload)
+  format <- if (is.null(payload$format)) "svg" else tolower(as.character(payload$format))
+  if (!format %in% c("svg", "pdf", "png", "tiff")) stop(sprintf("Unsupported figure format: %s", format))
+  dir.create(destination, recursive = TRUE, showWarnings = FALSE)
+  path <- file.path(destination, paste0("qpcr-helper-figure.", format))
+  save_publication_format(
+    prepared$plot,
+    path,
+    format = format,
+    width_mm = prepared$width_mm,
+    height_mm = prepared$height_mm,
+    dpi = prepared$dpi
+  )
+  content_types <- c(svg = "image/svg+xml", pdf = "application/pdf", png = "image/png", tiff = "image/tiff")
+  list(path = path, format = format, content_type = unname(content_types[[format]]))
 }
 
 run_export_payload <- function(payload, destination = tempfile("qpcr-export-")) {

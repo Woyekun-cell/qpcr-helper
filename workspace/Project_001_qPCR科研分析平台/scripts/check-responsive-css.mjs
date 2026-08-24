@@ -10,7 +10,7 @@ if (!/white-space:\s*nowrap/.test(buttonRule)) {
 if (!/\.top-actions\s*\{[^}]*gap:\s*6px/s.test(mobileRule)) {
   throw new Error("Mobile top actions must use a compact gap");
 }
-if (!/\.figure-toolbar\s*\{[^}]*flex-direction:\s*column/s.test(mobileRule)) {
+if (!/\.figure-download\s*\{[^}]*grid-template-columns:\s*1fr/s.test(mobileRule)) {
   throw new Error("Mobile figure controls must stack without horizontal overflow");
 }
 

@@ -47,6 +47,10 @@ export async function runRPreview(payload: unknown) {
   return (await post("/v1/preview", payload)).json();
 }
 
+export async function runRFigure(payload: unknown): Promise<ArrayBuffer> {
+  return (await post("/v1/figure", payload)).arrayBuffer();
+}
+
 export async function runRExport(payload: unknown): Promise<ArrayBuffer> {
   return (await post("/v1/export", payload)).arrayBuffer();
 }
