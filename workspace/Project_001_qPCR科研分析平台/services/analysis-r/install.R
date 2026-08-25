@@ -15,13 +15,19 @@ packages <- c(
   "digest"
 )
 
+cran_repo <- Sys.getenv(
+  "CRAN_REPO",
+  unset = "https://p3m.dev/cran/__linux__/noble/latest"
+)
+options(repos = c(CRAN = cran_repo))
+
 missing <- packages[!vapply(packages, requireNamespace, logical(1), quietly = TRUE)]
 if (length(missing) > 0) {
-  install.packages(missing, repos = "https://cloud.r-project.org", Ncpus = 2L)
+  install.packages(missing, Ncpus = 4L)
 }
 
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager", repos = "https://cloud.r-project.org")
+  install.packages("BiocManager")
 }
 bioconductor_packages <- c("ComplexHeatmap")
 missing_bioconductor <- bioconductor_packages[!vapply(bioconductor_packages, requireNamespace, logical(1), quietly = TRUE)]

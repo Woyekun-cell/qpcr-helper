@@ -1,0 +1,12 @@
+.git
+.github
+**/node_modules
+**/.next
+**/coverage
+**/dist
+**/*.log
+.env
+.env.*
+!.env.example
+.r-lib
+services/analysis-r/artifacts
