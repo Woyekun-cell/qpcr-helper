@@ -26,10 +26,20 @@ pnpm dev
 
 访问 `http://localhost:3000`，内置独立、配对、单因素、两因素、时间序列、多基因六组合成示例。验证：`pnpm test && pnpm typecheck && pnpm lint && pnpm check:contrast && pnpm check:responsive && pnpm build`；双服务启动后运行 `pnpm e2e:local`。
 
+## 对话式远程分析
+
+AI 先把用户上传或粘贴的数据整理为 Helper 标准 JSON；统计与绘图仍由生产站点完成。连接器支持文件或标准输入：
+
+```bash
+pnpm analyze:remote -- --input request.json --output result --formats svg,pdf,png --package
+pnpm analyze:remote -- --input - --output result --formats svg < request.json
+```
+
+输出 `analysis-result.json`、指定格式图和可选科研包。游客能力令牌不会写入磁盘。生产站点：<https://qpcr-helper-web-production.up.railway.app>。
+
 ## 部署
 
-- Vercel：Root Directory 为 `workspace/Project_001_qPCR科研分析平台/apps/web`，配置 Supabase 与 R 环境变量。
-- Render：Blueprint Path 为 `workspace/Project_001_qPCR科研分析平台/services/analysis-r/render.yaml`，共享密钥同步到 Vercel。
+- Railway：Web 与 R 为独立服务，通过私网地址和共享密钥通信；公开域名只暴露 Web。
 - Supabase：执行迁移，确认私有 bucket、RLS、生产及本地 Auth callback。
 
 无云端凭据时可本地运行，不自动创建线上资源。

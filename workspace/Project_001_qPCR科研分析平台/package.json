@@ -9,14 +9,16 @@
   "scripts": {
     "dev": "pnpm --filter @qpcr/web dev",
     "build": "pnpm --filter @qpcr/contracts build && pnpm --filter @qpcr/web build",
-    "test": "pnpm -r --if-present test",
+    "test": "pnpm run test:remote && pnpm -r --if-present test",
+    "test:remote": "node --test scripts/qpcr-remote-*.test.mjs",
     "test:contracts": "pnpm --filter @qpcr/contracts test",
     "test:web": "pnpm --filter @qpcr/web test",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "check:contrast": "node scripts/check-contrast.mjs",
     "check:responsive": "node scripts/check-responsive-css.mjs",
-    "e2e:local": "node scripts/e2e-local.mjs"
+    "e2e:local": "node scripts/e2e-local.mjs",
+    "analyze:remote": "node scripts/qpcr-remote-analyze.mjs"
   },
   "devDependencies": {
     "typescript": "6.0.3",
