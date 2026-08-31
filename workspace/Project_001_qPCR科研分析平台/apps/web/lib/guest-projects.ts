@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { createClientId } from "./id";
 
 export interface GuestProject {
   id: string;
@@ -39,7 +40,7 @@ export const guestProjects = {
       const createdAt = version.createdAt ?? Date.now();
       const versions = [
         ...(existing?.versions ?? []),
-        { id: crypto.randomUUID(), createdAt, payload: version.payload }
+        { id: createClientId(), createdAt, payload: version.payload }
       ];
       await database.projects.put({
         id: version.id,

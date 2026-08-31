@@ -3,7 +3,7 @@ import {
   experimentInputSchema,
   validateExperimentDesign
 } from "@qpcr/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createExampleExperiment,
   exampleCatalog,
@@ -58,5 +58,12 @@ describe("built-in qPCR Helper examples", () => {
     expect(result.samples.filter((sample) => sample.groupId === "after")).toHaveLength(6);
     expect(result.samples.every((sample) => sample.targetTechnicalN === 2)).toBe(true);
     expect(result.samples.every((sample) => sample.referenceTechnicalN === 2)).toBe(true);
+  });
+
+  it("creates a UUID project id when Web Crypto is unavailable", () => {
+    vi.stubGlobal("crypto", undefined);
+    const experiment = createExampleExperiment("independent_eight_fold", "en");
+    expect(experiment.projectId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    vi.unstubAllGlobals();
   });
 });

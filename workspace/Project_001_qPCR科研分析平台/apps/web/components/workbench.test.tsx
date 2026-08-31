@@ -1,8 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import { Workbench } from "./workbench";
+import { describe, expect, it, vi } from "vitest";
+import { analyzeDeltaDeltaCt } from "@qpcr/contracts";
+import { Workbench, wellsToText } from "./workbench";
+import { createDemoExperiment, createExampleExperiment } from "@/lib/demo";
+import type { PlatformAnalysisResult } from "@/lib/result-types";
 import { guestProjects } from "@/lib/guest-projects";
+import { parseCtText } from "@/lib/import";
 
 describe("qPCR workbench", () => {
   it("loads one of six examples and supports bilingual qPCR Helper branding", async () => {
@@ -65,6 +69,85 @@ describe("qPCR workbench", () => {
     expect(method).toHaveValue("mann_whitney");
   });
 
+  it("opens the data-and-figure canvas after one-click analysis", async () => {
+    const user = userEvent.setup();
+    const experiment = createDemoExperiment("zh-CN");
+    const result = {
+      calculation: analyzeDeltaDeltaCt(experiment),
+      statistics: {
+        analyses: { GENE1: { method: "Welch t-test" } },
+        contrasts: [{
+          target_gene: "GENE1",
+          contrast: "treated / control",
+          fold_change: 8,
+          fold_change_ci_low: 7,
+          fold_change_ci_high: 9,
+          p_adjusted: 0.001
+        }]
+      },
+      figure: {
+        svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"><text>figure</text></svg>",
+        backend: "R/ggplot2" as const,
+        plotType: "bar",
+        palette: "nature-muted",
+        widthMm: 90,
+        heightMm: 70
+      }
+    } satisfies PlatformAnalysisResult;
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return url.includes("figure-preview")
+        ? { ok: true, json: async () => result.figure }
+        : { ok: true, json: async () => ({ id: "job-one-click", result, token: "guest-token" }) };
+    }));
+    try {
+      render(<Workbench />);
+      await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+      await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+      await user.click(screen.getAllByRole("button", { name: /运行 R 分析/i })[0]!);
+      expect(await screen.findByRole("region", { name: /数据与图/i })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: /图形设置/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /相对表达量/i })).toBeInTheDocument();
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+  });
+
+  it("preserves design metadata when the editable Ct table is serialized", () => {
+    const source = createExampleExperiment("paired_response", "zh-CN");
+    const roundTripped = parseCtText(wellsToText(source.wells));
+    expect(roundTripped).toHaveLength(source.wells.length);
+    expect(roundTripped[0]).toMatchObject({
+      subjectId: source.wells[0]?.subjectId,
+      status: source.wells[0]?.status
+    });
+  });
+
+  it("clears stale computed values when a statistical setting changes", async () => {
+    const user = userEvent.setup();
+    const experiment = createDemoExperiment("zh-CN");
+    const result = {
+      calculation: analyzeDeltaDeltaCt(experiment),
+      statistics: { analyses: { GENE1: { method: "Welch t-test" } }, contrasts: [] },
+      figure: { svg: "<svg />", backend: "R/ggplot2" as const, widthMm: 90, heightMm: 70 }
+    } satisfies PlatformAnalysisResult;
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "job-stale", result }) }));
+    try {
+      render(<Workbench />);
+      await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+      await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+      await user.click(screen.getAllByRole("button", { name: /运行 R 分析/i })[0]!);
+      expect(await screen.findByRole("heading", { name: /相对表达量/i })).toBeInTheDocument();
+      await user.selectOptions(screen.getByRole("combobox", { name: /置信水平/i }), "0.9");
+      expect(screen.queryByRole("heading", { name: /相对表达量/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(/重新运行分析/i);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+  });
+
   it("lets researchers choose beta-actin and rename target genes and groups", async () => {
     const user = userEvent.setup();
     render(<Workbench />);
@@ -72,7 +155,7 @@ describe("qPCR workbench", () => {
     const reference = screen.getByRole("combobox", { name: /内参基因/i });
     await user.selectOptions(reference, "β-actin");
     expect(reference).toHaveValue("β-actin");
-    expect(screen.getAllByText(/Reference/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/内参|Reference/).length).toBeGreaterThan(0);
 
     const target = screen.getByRole("textbox", { name: /目标基因 1/i });
     await user.clear(target);
@@ -95,8 +178,61 @@ describe("qPCR workbench", () => {
     expect(within(summary).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "基因名", "重复数", "分组"
     ]);
-    const details = screen.getByText(/逐孔 Ct 明细/i).closest("details");
+    const details = screen.getByText(/^QC$/i).closest("details");
     expect(details).not.toHaveAttribute("open");
+  });
+
+  it("opens a compact editable raw Ct table with a recompute action", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+
+    const edit = screen.getByRole("button", { name: /编辑原始 Ct/i });
+    expect(edit).toBeInTheDocument();
+    await user.click(edit);
+
+    const table = screen.getByRole("table", { name: /原始 Ct 数据/i });
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "基因名", "重复", "分组", "Ct 值"
+    ]);
+    const ctInput = within(table).getAllByRole("spinbutton")[0]!;
+    await user.clear(ctInput);
+    await user.type(ctInput, "20.50");
+    await user.tab();
+    expect(screen.getByRole("button", { name: /重新计算/i })).toBeEnabled();
+  });
+
+  it("keeps edited data marked when recompute fails", async () => {
+    const user = userEvent.setup();
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "R analysis unavailable" })
+    }));
+    try {
+      render(<Workbench />);
+      await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+      await user.click(screen.getByRole("button", { name: /编辑原始 Ct/i }));
+      const ctInput = within(screen.getByRole("table", { name: /原始 Ct 数据/i })).getAllByRole("spinbutton")[0]!;
+      await user.clear(ctInput);
+      await user.type(ctInput, "20.50");
+      await user.click(screen.getByRole("button", { name: /重新计算/i }));
+      expect(await screen.findByText(/R analysis unavailable/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /重新计算/i })).toHaveAttribute("data-dirty", "true");
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+  });
+
+  it("paginates raw Ct rows instead of hiding wells after the first page", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.selectOptions(screen.getByRole("combobox", { name: /示例数据/i }), "multi_gene");
+    await user.click(screen.getByRole("button", { name: /编辑原始 Ct/i }));
+    const next = screen.getByRole("button", { name: /下一页/i });
+    expect(next).toBeEnabled();
+    await user.click(next);
+    expect(screen.getByText("2/3")).toBeInTheDocument();
   });
 
   it("offers sub-90-mm widths, gradient swatches and selectable point shapes", async () => {
@@ -134,6 +270,59 @@ describe("qPCR workbench", () => {
     for (const category of ["期刊风格", "莫兰迪", "马卡龙", "通用安全", "渐变", "自定义"]) {
       await user.click(screen.getByRole("button", { name: category }));
       expect(within(screen.getByRole("group", { name: /配色方案/i })).getAllByRole("button")).toHaveLength(8);
+    }
+  });
+
+  it("keeps categorical palette colors stable beyond the first three groups", async () => {
+    const user = userEvent.setup();
+    render(<Workbench />);
+    await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+    await user.click(screen.getByText(/选择与编辑配色/i));
+    const paletteGroup = screen.getByRole("group", { name: /配色方案/i });
+    for (const category of ["期刊风格", "莫兰迪", "马卡龙", "通用安全"]) {
+      await user.click(screen.getByRole("button", { name: category }));
+      const presets = within(paletteGroup).getAllByRole("button");
+      expect(presets.every((preset) => preset.querySelectorAll(".palette-swatch i").length >= 7)).toBe(true);
+    }
+  });
+
+  it("renders long biological group names as rows instead of breaking metric text", async () => {
+    const user = userEvent.setup();
+    const experiment = createDemoExperiment("zh-CN");
+    const calculation = analyzeDeltaDeltaCt(experiment);
+    calculation.groups = calculation.groups.map((group) => ({
+      ...group,
+      groupId: group.groupId === "control" ? "vehicle_early_morning" : "drug_late_recovery"
+    }));
+    const result = {
+      calculation,
+      statistics: {
+        analyses: { GENE1: { method: "Welch t-test" } },
+        contrasts: [{
+          target_gene: "GENE1",
+          contrast: "treated / control",
+          fold_change: 8,
+          fold_change_ci_low: 7,
+          fold_change_ci_high: 9,
+          p_adjusted: 0.001
+        }]
+      },
+      figure: { svg: "<svg />", backend: "R/ggplot2" as const, widthMm: 90, heightMm: 70 }
+    } satisfies PlatformAnalysisResult;
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "job-long-groups", result }) }));
+    try {
+      render(<Workbench />);
+      await user.click(screen.getAllByRole("button", { name: /载入演示/i })[0]!);
+      await user.click(screen.getByRole("button", { name: /分析与作图/i }));
+      await user.click(screen.getAllByRole("button", { name: /运行 R 分析/i })[0]!);
+      const resultRegion = await screen.findByRole("region", { name: /计算后的数据值/i });
+      expect(resultRegion.querySelectorAll(".metric-n-row")).toHaveLength(2);
+      expect(Array.from(resultRegion.querySelectorAll(".metric-n-row b")).map((node) => node.textContent)).toEqual([
+        "vehicle_early_morning", "drug_late_recovery"
+      ]);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
     }
   });
 
@@ -193,6 +382,6 @@ describe("qPCR workbench", () => {
     await user.selectOptions(format, "png");
     expect(screen.getByRole("combobox", { name: /下载分辨率/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /^下载图形$/i })).toBeInTheDocument();
-    expect(screen.getByText(/完整科研包（可选）/i).closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText(/^科研包$/i).closest("details")).not.toHaveAttribute("open");
   });
 });

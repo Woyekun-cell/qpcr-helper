@@ -19,12 +19,13 @@ import {
   FlaskConical,
   Languages,
   Palette,
+  Pencil,
   Play,
+  RefreshCw,
   Save,
-  Sparkles,
   Upload
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { defaultAnalysisConfig, type AnalysisRequest } from "@/lib/analysis-request";
 import {
@@ -35,6 +36,7 @@ import {
 } from "@/lib/demo";
 import { guestProjects } from "@/lib/guest-projects";
 import type { GuestProject } from "@/lib/guest-projects";
+import { createClientId } from "@/lib/id";
 import { parseCtText, parseCtWorkbookBundle } from "@/lib/import";
 import type { PlatformAnalysisResult } from "@/lib/result-types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -62,7 +64,6 @@ interface JobReference { id: string; token?: string; expiresAt?: number; exportR
 const copy = {
   "zh-CN": {
     title: "qPCR Helper",
-    subtitle: "从 Ct 到可复现结论",
     guest: "游客 · 本地保存",
     signIn: "登录",
     projects: "项目",
@@ -79,24 +80,22 @@ const copy = {
     target: "目标基因",
     calibrator: "对照组",
     importTitle: "粘贴或导入 Ct 表",
-    importHint: "接受 CSV、TSV、XLSX。表头模板：well_id, sample_id, biological_replicate, technical_replicate, group, gene, role, ct",
     parse: "解析数据",
-    qcTitle: "逐孔审计，不静默排除",
+    qcTitle: "QC",
     statsTitle: "统计方法",
     run: "运行 R 分析",
     running: "正在分析…",
-    resultTitle: "表达量与统计推断",
-    figureTitle: "R 投稿级科研图",
+    resultTitle: "结果",
+    figureTitle: "图形",
     exportTitle: "完整科研包",
     export: "下载 ZIP 科研包",
-    empty: "载入演示或导入 Ct 数据后开始。",
+    empty: "载入演示或导入 Ct 数据。",
     exactN: "n 仅计生物学重复，技术孔先汇总。",
     wells: "个孔",
     lang: "English"
   },
   en: {
     title: "qPCR Helper",
-    subtitle: "From Ct values to reproducible evidence",
     guest: "Guest · saved locally",
     signIn: "Sign in",
     projects: "Projects",
@@ -113,17 +112,16 @@ const copy = {
     target: "Target gene",
     calibrator: "Calibrator group",
     importTitle: "Paste or import a Ct table",
-    importHint: "Accepts CSV, TSV and XLSX. Template headers: well_id, sample_id, biological_replicate, technical_replicate, group, gene, role, ct",
     parse: "Parse data",
-    qcTitle: "Auditable well decisions, no silent exclusion",
+    qcTitle: "QC",
     statsTitle: "Statistical method",
     run: "Run R analysis",
     running: "Analyzing…",
-    resultTitle: "Expression and statistical inference",
-    figureTitle: "R publication figure",
+    resultTitle: "Results",
+    figureTitle: "Figure",
     exportTitle: "Complete research package",
     export: "Download research ZIP",
-    empty: "Load the demo or import Ct values to begin.",
+    empty: "Load a demo or import Ct values.",
     exactN: "n counts biological replicates only; technical wells are aggregated first.",
     wells: "wells",
     lang: "中文"
@@ -131,7 +129,32 @@ const copy = {
 } as const;
 
 const starterText = "well_id\tsample_id\tbiological_replicate\ttechnical_replicate\tgroup\tgene\trole\tct";
+const roundTripHeaders = [
+  "well_id", "sample_id", "biological_replicate", "technical_replicate", "group", "gene", "role", "ct",
+  "status", "subject_id", "factor_a", "factor_b", "time", "plate_id", "batch"
+] as const;
 const MAX_IMPORT_BYTES = 10_000_000;
+
+export function wellsToText(wells: CtWell[]): string {
+  const valueFor = (well: CtWell, header: typeof roundTripHeaders[number]): string | number | null | undefined => ({
+    well_id: well.wellId,
+    sample_id: well.sampleId,
+    biological_replicate: well.biologicalReplicateId,
+    technical_replicate: well.technicalReplicateId,
+    group: well.groupId,
+    gene: well.gene,
+    role: well.geneRole,
+    ct: well.ct,
+    status: well.status,
+    subject_id: well.subjectId,
+    factor_a: well.factorA,
+    factor_b: well.factorB,
+    time: well.time,
+    plate_id: well.plateId,
+    batch: well.batch
+  })[header];
+  return [roundTripHeaders.join("\t"), ...wells.map((well) => roundTripHeaders.map((header) => String(valueFor(well, header) ?? "").replace(/[\t\r\n]/g, " ")).join("\t"))].join("\n");
+}
 
 function inferExperiment(wells: CtWell[], locale: Locale, current?: ExperimentInput): ExperimentInput {
   const referenceGene = wells.find((well) => well.geneRole === "reference")?.gene;
@@ -141,7 +164,7 @@ function inferExperiment(wells: CtWell[], locale: Locale, current?: ExperimentIn
     throw new Error(locale === "zh-CN" ? "需至少包含一个内参、一个目标基因和两个组。" : "At least one reference, one target and two groups are required.");
   }
   return {
-    projectId: current?.projectId ?? crypto.randomUUID(),
+    projectId: current?.projectId ?? createClientId(),
     name: current?.name ?? (locale === "zh-CN" ? "未命名 qPCR 项目" : "Untitled qPCR project"),
     locale,
     referenceGene,
@@ -158,12 +181,12 @@ function scientific(value: number | undefined): string {
   return new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 }).format(value);
 }
 
-function biologicalNLabel(result: PlatformAnalysisResult): string {
+function biologicalNEntries(result: PlatformAnalysisResult): Array<{ group: string; n: number }> {
   const unique = new Map<string, number>();
   for (const group of result.calculation.groups) {
     unique.set(group.groupId, Math.max(unique.get(group.groupId) ?? 0, group.biologicalN));
   }
-  return [...unique].map(([group, n]) => `${group} ${n}`).join(" · ");
+  return [...unique].map(([group, n]) => ({ group, n }));
 }
 
 function percentLabel(value: number | undefined): string {
@@ -173,44 +196,44 @@ function percentLabel(value: number | undefined): string {
 type PaletteOption = { id?: string; value: FigurePalette; label: string; colors: string[]; whiteCenter?: boolean };
 const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; en: string }; options: PaletteOption[] }> = [
   { value: "journal", label: { "zh-CN": "期刊风格", en: "Journal" }, options: [
-    { value: "nature-muted", label: "Nature muted", colors: ["#4F6B45", "#D98268", "#4C6F91"] },
-    { value: "nature-earth", label: "Nature earth", colors: ["#496A4B", "#B7654F", "#4E6F8E"] },
-    { value: "cell-bright", label: "Cell bright", colors: ["#3B82B5", "#E0764C", "#50A56C"] },
-    { value: "cell-soft", label: "Cell soft", colors: ["#5B7FA3", "#C9826A", "#719477"] },
-    { value: "prism", label: "Prism classic", colors: ["#3B75AF", "#E06B65", "#59A14F"] },
-    { value: "nature-cool", label: "Nature cool", colors: ["#355F8A", "#5C8D89", "#8A789E"] },
-    { value: "nature-warm", label: "Nature warm", colors: ["#A65F46", "#C48B4E", "#7B8061"] },
-    { value: "cell-cmy", label: "Cell CMY", colors: ["#2698BA", "#D45C91", "#D7A928"] }
+    { value: "nature-muted", label: "Nature muted", colors: ["#4F6B45", "#D98268", "#4C6F91", "#7A6B98", "#B58B43", "#4D8C88", "#777777"] },
+    { value: "nature-earth", label: "Nature earth", colors: ["#496A4B", "#B7654F", "#4E6F8E", "#A88A4C", "#75658C", "#52847F", "#777777"] },
+    { value: "cell-bright", label: "Cell bright", colors: ["#3B82B5", "#E0764C", "#50A56C", "#D6A43B", "#9A6EB4", "#45A3A5", "#C95B76"] },
+    { value: "cell-soft", label: "Cell soft", colors: ["#5B7FA3", "#C9826A", "#719477", "#C2A15D", "#8C789D", "#6B9998", "#B77783"] },
+    { value: "prism", label: "Prism classic", colors: ["#3B75AF", "#E06B65", "#59A14F", "#F0A43A", "#8B6BB1", "#4FA3A5", "#9A6A4F"] },
+    { value: "nature-cool", label: "Nature cool", colors: ["#355F8A", "#5C8D89", "#8A789E", "#6F93B0", "#84A8A2", "#A396B1", "#5D6E78"] },
+    { value: "nature-warm", label: "Nature warm", colors: ["#A65F46", "#C48B4E", "#7B8061", "#B8785E", "#D0A267", "#929679", "#795D53"] },
+    { value: "cell-cmy", label: "Cell CMY", colors: ["#2698BA", "#D45C91", "#D7A928", "#50B6B1", "#8A75B8", "#E37A58", "#66727C"] }
   ] },
   { value: "morandi", label: { "zh-CN": "莫兰迪", en: "Morandi" }, options: [
-    { value: "morandi-sage", label: "Sage", colors: ["#7E8B76", "#B8897D", "#8091A0"] },
-    { value: "morandi-dust", label: "Dust", colors: ["#9C7F7B", "#B59A8B", "#7D8C91"] },
-    { value: "morandi-blue", label: "Blue grey", colors: ["#667C8A", "#8EA0AA", "#9A7E79"] },
-    { value: "morandi-earth", label: "Earth", colors: ["#897568", "#A98576", "#6F8179"] },
-    { value: "morandi-rose", label: "Rose", colors: ["#A48282", "#C0A0A0", "#7E8E91"] },
-    { value: "morandi-lavender", label: "Lavender", colors: ["#817A91", "#A49AAD", "#788B87"] },
-    { value: "morandi-forest", label: "Forest", colors: ["#64766B", "#879388", "#9B8274"] },
-    { value: "morandi-stone", label: "Stone", colors: ["#777B78", "#9C9990", "#7D8991"] }
+    { value: "morandi-sage", label: "Sage", colors: ["#7E8B76", "#B8897D", "#8091A0", "#A59B79", "#8E8294", "#75928F", "#9A9189"] },
+    { value: "morandi-dust", label: "Dust", colors: ["#9C7F7B", "#B59A8B", "#7D8C91", "#9A9277", "#8B7D86", "#708681", "#A6A09A"] },
+    { value: "morandi-blue", label: "Blue grey", colors: ["#667C8A", "#8EA0AA", "#9A7E79", "#7F9082", "#91869B", "#A69B82", "#7A7774"] },
+    { value: "morandi-earth", label: "Earth", colors: ["#897568", "#A98576", "#6F8179", "#9A906F", "#7E7480", "#A3988F", "#696D68"] },
+    { value: "morandi-rose", label: "Rose", colors: ["#A48282", "#C0A0A0", "#7E8E91", "#9D8B79", "#867D90", "#859B91", "#A39B96"] },
+    { value: "morandi-lavender", label: "Lavender", colors: ["#817A91", "#A49AAD", "#788B87", "#9B897C", "#77899A", "#A39880", "#757572"] },
+    { value: "morandi-forest", label: "Forest", colors: ["#64766B", "#879388", "#9B8274", "#7B8794", "#958A9A", "#A59B7C", "#70736E"] },
+    { value: "morandi-stone", label: "Stone", colors: ["#777B78", "#9C9990", "#7D8991", "#9B807B", "#858094", "#778F88", "#A49A80"] }
   ] },
   { value: "macaron", label: { "zh-CN": "马卡龙", en: "Macaron" }, options: [
-    { value: "macaron-pastel", label: "Pastel", colors: ["#8EC5E8", "#F3A6A0", "#9ED9B5"] },
-    { value: "macaron-candy", label: "Candy", colors: ["#69B7EB", "#FF8F86", "#76D39B"] },
-    { value: "macaron-gelato", label: "Gelato", colors: ["#A7C7E7", "#F4B6A8", "#B7D7B0"] },
-    { value: "macaron-mint", label: "Mint", colors: ["#87D8C1", "#A7CFE8", "#F2B4B0"] },
-    { value: "macaron-peach", label: "Peach", colors: ["#F3B59D", "#F2CF91", "#9CCDBB"] },
-    { value: "macaron-sky", label: "Sky", colors: ["#83C7EA", "#A9BCE8", "#F0A8B8"] },
-    { value: "macaron-lilac", label: "Lilac", colors: ["#C4A7E7", "#F0B6D2", "#9FD3CE"] },
-    { value: "macaron-lemon", label: "Lemon", colors: ["#EFD675", "#A7D8A2", "#94C8E8"] }
+    { value: "macaron-pastel", label: "Pastel", colors: ["#8EC5E8", "#F3A6A0", "#9ED9B5", "#F3D58A", "#C6A8E0", "#91D5D2", "#F1B3CF"] },
+    { value: "macaron-candy", label: "Candy", colors: ["#69B7EB", "#FF8F86", "#76D39B", "#FFD36E", "#B995E4", "#65CECC", "#F38FB5"] },
+    { value: "macaron-gelato", label: "Gelato", colors: ["#A7C7E7", "#F4B6A8", "#B7D7B0", "#F2D49B", "#C9B5D9", "#A6D5D2", "#E9B7C7"] },
+    { value: "macaron-mint", label: "Mint", colors: ["#87D8C1", "#A7CFE8", "#F2B4B0", "#EBD68C", "#C7B0E2", "#8FD7D5", "#E8B8D0"] },
+    { value: "macaron-peach", label: "Peach", colors: ["#F3B59D", "#F2CF91", "#9CCDBB", "#91BFE2", "#C8AFE2", "#E89CB7", "#BBD69A"] },
+    { value: "macaron-sky", label: "Sky", colors: ["#83C7EA", "#A9BCE8", "#F0A8B8", "#A1D7BF", "#E9D17C", "#C7AFE6", "#83D3D0"] },
+    { value: "macaron-lilac", label: "Lilac", colors: ["#C4A7E7", "#F0B6D2", "#9FD3CE", "#9FC7E8", "#E9D589", "#A8D39F", "#F0AE9D"] },
+    { value: "macaron-lemon", label: "Lemon", colors: ["#EFD675", "#A7D8A2", "#94C8E8", "#F0AAA4", "#C7AFE8", "#87D3CA", "#E5B4D1"] }
   ] },
   { value: "accessible", label: { "zh-CN": "通用安全", en: "Accessible" }, options: [
-    { value: "okabe-ito", label: "Okabe–Ito", colors: ["#0072B2", "#D55E00", "#009E73"] },
-    { value: "tol-bright", label: "Tol bright", colors: ["#4477AA", "#EE6677", "#228833"] },
-    { value: "cool", label: "Cool", colors: ["#2F5D8A", "#5A8BB5", "#63A7A3"] },
-    { value: "warm", label: "Warm", colors: ["#8C4A32", "#C96B4B", "#D99A4E"] },
-    { value: "tol-muted", label: "Tol muted", colors: ["#332288", "#88CCEE", "#44AA99"] },
-    { value: "ibm-safe", label: "IBM safe", colors: ["#648FFF", "#DC267F", "#785EF0"] },
-    { value: "wong", label: "Wong", colors: ["#0072B2", "#D55E00", "#009E73"] },
-    { value: "tableau-safe", label: "Tableau", colors: ["#4E79A7", "#E15759", "#59A14F"] }
+    { value: "okabe-ito", label: "Okabe–Ito", colors: ["#0072B2", "#D55E00", "#009E73", "#E69F00", "#CC79A7", "#56B4E9", "#000000"] },
+    { value: "tol-bright", label: "Tol bright", colors: ["#4477AA", "#EE6677", "#228833", "#CCBB44", "#AA3377", "#66CCEE", "#BBBBBB"] },
+    { value: "cool", label: "Cool", colors: ["#2F5D8A", "#5A8BB5", "#63A7A3", "#8CB9A8", "#8073AC", "#B2ABD2", "#6B7280"] },
+    { value: "warm", label: "Warm", colors: ["#8C4A32", "#C96B4B", "#D99A4E", "#6F7D4E", "#A35D6A", "#8B6A50", "#5E5A55"] },
+    { value: "tol-muted", label: "Tol muted", colors: ["#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77", "#CC6677"] },
+    { value: "ibm-safe", label: "IBM safe", colors: ["#648FFF", "#DC267F", "#785EF0", "#FE6100", "#FFB000", "#3D8D7A", "#6F6F6F"] },
+    { value: "wong", label: "Wong", colors: ["#0072B2", "#D55E00", "#009E73", "#E69F00", "#CC79A7", "#56B4E9", "#000000"] },
+    { value: "tableau-safe", label: "Tableau", colors: ["#4E79A7", "#E15759", "#59A14F", "#F28E2B", "#B07AA1", "#76B7B2", "#9C755F"] }
   ] },
   { value: "gradient", label: { "zh-CN": "渐变", en: "Gradient" }, options: [
     { value: "gradient-blue-red", label: "Blue–red", colors: ["#315B8A", "#B64F4A"], whiteCenter: true },
@@ -223,14 +246,14 @@ const paletteGroups: Array<{ value: PaletteCategory; label: { "zh-CN": string; e
     { value: "gradient-sunset-multi", label: "Coral sequential", colors: ["#FCEBE4", "#F5C4B2", "#E98768", "#B94F3F"] }
   ] },
   { value: "custom", label: { "zh-CN": "自定义", en: "Custom" }, options: [
-    { id: "custom-1", value: "custom", label: "Custom 1", colors: ["#496A4B", "#D98268", "#4C6F91", "#D6A43B"] },
-    { id: "custom-2", value: "custom", label: "Custom 2", colors: ["#345B78", "#D47B6A", "#6C936A", "#B38A42"] },
-    { id: "custom-3", value: "custom", label: "Custom 3", colors: ["#675A7E", "#B86D82", "#4E8982", "#C59A58"] },
-    { id: "custom-4", value: "custom", label: "Custom 4", colors: ["#2F6473", "#C86F4F", "#7A8F55", "#8A6E9D"] },
-    { id: "custom-5", value: "custom", label: "Custom 5", colors: ["#3F5D45", "#BD655A", "#537FA0", "#B38F54"] },
-    { id: "custom-6", value: "custom", label: "Custom 6", colors: ["#536B8B", "#C97A93", "#5F937E", "#C2A04E"] },
-    { id: "custom-7", value: "custom", label: "Custom 7", colors: ["#415F72", "#B85C70", "#74905B", "#9A7298"] },
-    { id: "custom-8", value: "custom", label: "Custom 8", colors: ["#586C4F", "#C16B55", "#527B88", "#AD8550"] }
+    { id: "custom-1", value: "custom", label: "Custom 1", colors: ["#496A4B", "#D98268", "#4C6F91", "#7A6B98", "#B58B43", "#4D8C88", "#777777"] },
+    { id: "custom-2", value: "custom", label: "Custom 2", colors: ["#345B78", "#D47B6A", "#6C936A", "#B38A42", "#8062A0", "#4E9592", "#777777"] },
+    { id: "custom-3", value: "custom", label: "Custom 3", colors: ["#675A7E", "#B86D82", "#4E8982", "#C59A58", "#3C6F9B", "#738D59", "#777777"] },
+    { id: "custom-4", value: "custom", label: "Custom 4", colors: ["#2F6473", "#C86F4F", "#7A8F55", "#8A6E9D", "#D3A249", "#4E9A8F", "#777777"] },
+    { id: "custom-5", value: "custom", label: "Custom 5", colors: ["#3F5D45", "#BD655A", "#537FA0", "#B38F54", "#7B6799", "#5A9683", "#777777"] },
+    { id: "custom-6", value: "custom", label: "Custom 6", colors: ["#536B8B", "#C97A93", "#5F937E", "#C2A04E", "#80639C", "#4B8EAA", "#777777"] },
+    { id: "custom-7", value: "custom", label: "Custom 7", colors: ["#415F72", "#B85C70", "#74905B", "#9A7298", "#C4984A", "#4D8F8C", "#777777"] },
+    { id: "custom-8", value: "custom", label: "Custom 8", colors: ["#586C4F", "#C16B55", "#527B88", "#AD8550", "#7C6799", "#4C9181", "#777777"] }
   ] }
 ];
 
@@ -337,7 +360,7 @@ export function Workbench() {
   const [figureType, setFigureType] = useState<FigureType>("bar");
   const [figurePalette, setFigurePalette] = useState<FigurePalette>("nature-muted");
   const [paletteCategory, setPaletteCategory] = useState<PaletteCategory>("journal");
-  const [customColors, setCustomColors] = useState(["#496A4B", "#D98268", "#4C6F91", "#D6A43B"]);
+  const [customColors, setCustomColors] = useState(["#4F6B45", "#D98268", "#4C6F91", "#7A6B98", "#B58B43", "#4D8C88", "#777777"]);
   const [pLabelMode, setPLabelMode] = useState<PLabelMode>("stars");
   const [showPoints, setShowPoints] = useState(true);
   const [pointShape, setPointShape] = useState<PointShape>("circle");
@@ -357,10 +380,14 @@ export function Workbench() {
   const [job, setJob] = useState<JobReference | null>(null);
   const [showAccount, setShowAccount] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showRawEditor, setShowRawEditor] = useState(false);
+  const [hasUnappliedEdits, setHasUnappliedEdits] = useState(false);
   const [userEmail, setUserEmail] = useState<string | undefined>();
   const [localProjects, setLocalProjects] = useState<GuestProject[]>([]);
   const [cloudProjects, setCloudProjects] = useState<CloudProject[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const analysisCanvasRef = useRef<HTMLDivElement>(null);
+  const previousConfigRef = useRef<AnalysisConfig | null>(null);
 
   const localCalculation = useMemo<AnalysisResult | null>(() => {
     if (!experiment) return null;
@@ -428,16 +455,37 @@ export function Workbench() {
     };
   }, [activeFigureConfig, config, result, step]);
 
+  useEffect(() => {
+    if (step !== 1 || !result) return;
+    const timer = window.setTimeout(() => {
+      analysisCanvasRef.current?.scrollIntoView?.({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+      analysisCanvasRef.current?.focus?.({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [result, step]);
+
+  useEffect(() => {
+    const previous = previousConfigRef.current;
+    if (previous && config && result && JSON.stringify(previous) !== JSON.stringify(config)) {
+      clearComputedResults();
+      setMessage(locale === "zh-CN" ? "统计设置已修改，请重新运行分析。" : "Statistical settings changed. Run the analysis again.");
+    }
+    previousConfigRef.current = config;
+  }, [config, locale, result]);
+
   function loadExample(exampleId: ExampleId) {
     const demo = createExampleExperiment(exampleId, locale);
     const example = exampleCatalog.find((item) => item.id === exampleId);
     setExperiment(demo);
     setConfig(defaultAnalysisConfig(demo));
+    setPaste(wellsToText(demo.wells));
     setFigureType(example?.figureType ?? "bar");
     setResult(null);
     setFigurePreview(null);
     setJob(null);
     setQcDecisions([]);
+    setShowRawEditor(false);
+    setHasUnappliedEdits(false);
     setMessage("");
   }
 
@@ -445,11 +493,14 @@ export function Workbench() {
     const demo = createDemoExperiment(locale);
     setExperiment(demo);
     setConfig(defaultAnalysisConfig(demo));
+    setPaste(wellsToText(demo.wells));
     setFigureType("bar");
     setResult(null);
     setFigurePreview(null);
     setJob(null);
     setQcDecisions([]);
+    setShowRawEditor(false);
+    setHasUnappliedEdits(false);
     setMessage("");
   }
 
@@ -465,15 +516,49 @@ export function Workbench() {
     setJob(null);
   }
 
+  function updateAnalysisConfig(nextConfig: AnalysisConfig) {
+    setConfig(nextConfig);
+    if (result) {
+      clearComputedResults();
+      setMessage(locale === "zh-CN" ? "统计设置已修改，请重新运行分析。" : "Statistical settings changed. Run the analysis again.");
+    }
+  }
+
+  function updateRawWell(wellId: string, patch: Partial<Pick<CtWell, "ct" | "groupId">>) {
+    if (!experiment) return;
+    const nextExperiment = {
+      ...experiment,
+      wells: experiment.wells.map((well) => well.wellId === wellId ? { ...well, ...patch } : well)
+    };
+    setExperiment(nextExperiment);
+    setPaste(wellsToText(nextExperiment.wells));
+    setHasUnappliedEdits(true);
+    clearComputedResults();
+  }
+
+  async function recomputeEditedData() {
+    if (!experiment) return;
+    const succeeded = await runAnalysis(experiment, config ?? defaultAnalysisConfig(experiment), 1);
+    if (succeeded) setHasUnappliedEdits(false);
+  }
+
+  function openDataEditor() {
+    setStep(0);
+    setShowRawEditor(true);
+  }
+
   function renameReferenceGene(nextValue: string) {
     if (!experiment) return;
     const nextGene = nextValue.trim();
     if (!nextGene) return;
-    setExperiment({
+    const nextExperiment = {
       ...experiment,
       referenceGene: nextGene,
       wells: experiment.wells.map((well) => well.geneRole === "reference" ? { ...well, gene: nextGene } : well)
-    });
+    };
+    setExperiment(nextExperiment);
+    setPaste(wellsToText(nextExperiment.wells));
+    setHasUnappliedEdits(true);
     clearComputedResults();
   }
 
@@ -485,12 +570,15 @@ export function Workbench() {
       setMessage(locale === "zh-CN" ? "目标基因名不能重复。" : "Target-gene names must be unique.");
       return;
     }
-    setExperiment({
+    const nextExperiment = {
       ...experiment,
       targetGenes: experiment.targetGenes.map((gene) => gene === previousGene ? nextGene : gene),
       wells: experiment.wells.map((well) => well.geneRole === "target" && well.gene === previousGene ? { ...well, gene: nextGene } : well)
-    });
+    };
+    setExperiment(nextExperiment);
+    setPaste(wellsToText(nextExperiment.wells));
     setMessage("");
+    setHasUnappliedEdits(true);
     clearComputedResults();
   }
 
@@ -517,7 +605,9 @@ export function Workbench() {
     };
     setExperiment(nextExperiment);
     setConfig(nextConfig);
+    setPaste(wellsToText(nextExperiment.wells));
     setMessage("");
+    setHasUnappliedEdits(true);
     clearComputedResults();
   }
 
@@ -525,11 +615,14 @@ export function Workbench() {
     const next = inferExperiment(wells, locale, experiment ?? undefined);
     setExperiment(next);
     setConfig(defaultAnalysisConfig(next));
+    setPaste(wellsToText(wells));
     setFigureType(recommendedFigureType(next));
     setQcDecisions(decisions);
     setResult(null);
     setFigurePreview(null);
     setJob(null);
+    setShowRawEditor(false);
+    setHasUnappliedEdits(false);
     setMessage(`${wells.length} ${t.wells}`);
   }
 
@@ -546,9 +639,9 @@ export function Workbench() {
       }
       if (/\.xlsx?$/i.test(file.name)) {
         const bundle = await parseCtWorkbookBundle(await file.arrayBuffer());
-        acceptWells(bundle.wells, bundle.qcDecisions);
+        await analyzeImportedWells(bundle.wells, bundle.qcDecisions);
       } else {
-        acceptWells(parseCtText(await file.text()));
+        await analyzeImportedWells(parseCtText(await file.text()));
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Import failed");
@@ -581,6 +674,7 @@ export function Workbench() {
     setResult(null);
     setFigurePreview(null);
     setJob(null);
+    setHasUnappliedEdits(true);
   }
 
   async function saveProject() {
@@ -683,10 +777,10 @@ export function Workbench() {
     if (response.ok) setCloudProjects((projects) => projects.filter((item) => item.id !== project.id));
   }
 
-  async function runAnalysis(experimentOverride?: ExperimentInput, configOverride?: AnalysisConfig, destinationStep = 1, figureTypeOverride?: FigureType) {
+  async function runAnalysis(experimentOverride?: ExperimentInput, configOverride?: AnalysisConfig, destinationStep = 1, figureTypeOverride?: FigureType, qcDecisionsOverride = qcDecisions): Promise<boolean> {
     const activeExperiment = experimentOverride ?? experiment;
     const activeConfig = configOverride ?? config;
-    if (!activeExperiment || !activeConfig) return;
+    if (!activeExperiment || !activeConfig) return false;
     const activeFigureType = figureTypeOverride ?? figureType;
     setBusy(true);
     setMessage("");
@@ -695,7 +789,7 @@ export function Workbench() {
         experiment: activeExperiment,
         config: activeConfig,
         figure: { ...activeFigureConfig, plotType: activeFigureType },
-        qcDecisions
+        qcDecisions: qcDecisionsOverride
       };
       const response = await fetch("/api/analysis-jobs", {
         method: "POST",
@@ -716,26 +810,37 @@ export function Workbench() {
       await guestProjects.appendVersion({
         id: activeExperiment.projectId,
         name: activeExperiment.name,
-        payload: { experiment: activeExperiment, config: activeConfig, figureType: activeFigureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, pointShape, pointSize, figureWidth, figureHeight, figureDpi, qcDecisions, result: completedResult }
+        payload: { experiment: activeExperiment, config: activeConfig, figureType: activeFigureType, figurePalette, paletteCategory, customColors, pLabelMode, showPoints, pointShape, pointSize, figureWidth, figureHeight, figureDpi, qcDecisions: qcDecisionsOverride, result: completedResult }
       });
       setStep(destinationStep);
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Analysis failed");
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
+  async function analyzeImportedWells(wells: CtWell[], decisions: QcDecision[] = []) {
+    const nextExperiment = inferExperiment(wells, locale, experiment ?? undefined);
+    const nextConfig = defaultAnalysisConfig(nextExperiment);
+    const nextFigureType = recommendedFigureType(nextExperiment);
+    setExperiment(nextExperiment);
+    setConfig(nextConfig);
+    setFigureType(nextFigureType);
+    setPaste(wellsToText(wells));
+    setQcDecisions(decisions);
+    setResult(null);
+    setFigurePreview(null);
+    setJob(null);
+    setShowRawEditor(false);
+    setHasUnappliedEdits(false);
+    await runAnalysis(nextExperiment, nextConfig, 1, nextFigureType, decisions);
+  }
+
   async function analyzePastedData() {
-    try {
-      const nextExperiment = inferExperiment(parseCtText(paste), locale, experiment ?? undefined);
-      const nextConfig = defaultAnalysisConfig(nextExperiment);
-      const nextFigureType = recommendedFigureType(nextExperiment);
-      setExperiment(nextExperiment);
-      setConfig(nextConfig);
-      setFigureType(nextFigureType);
-      await runAnalysis(nextExperiment, nextConfig, 1, nextFigureType);
-    } catch (error) {
+    try { await analyzeImportedWells(parseCtText(paste)); } catch (error) {
       setMessage(error instanceof Error ? error.message : "Import failed");
     }
   }
@@ -743,17 +848,17 @@ export function Workbench() {
   function updateContrastMode(contrastMode: AnalysisConfig["contrastMode"]) {
     if (!config || !experiment) return;
     if (config.design !== "one_way") {
-      setConfig({ ...config, contrastMode });
+      updateAnalysisConfig({ ...config, contrastMode });
       return;
     }
     const calibrator = experiment.groups.find((group) => group.isCalibrator)?.id ?? "";
     const treatment = experiment.groups.find((group) => !group.isCalibrator)?.id ?? "";
     if (contrastMode === "control") {
-      setConfig({ ...config, contrastMode, correction: "dunnett", method: "recommended" });
+      updateAnalysisConfig({ ...config, contrastMode, correction: "dunnett", method: "recommended" });
     } else if (contrastMode === "all_pairs") {
-      setConfig({ ...config, contrastMode, correction: "games-howell", method: "welch_anova" });
+      updateAnalysisConfig({ ...config, contrastMode, correction: "games-howell", method: "welch_anova" });
     } else {
-      setConfig({
+      updateAnalysisConfig({
         ...config,
         contrastMode,
         correction: "holm",
@@ -766,13 +871,13 @@ export function Workbench() {
   function updateCorrection(correction: AnalysisConfig["correction"]) {
     if (!config) return;
     if (correction === "tukey") {
-      setConfig({ ...config, correction, contrastMode: "all_pairs", method: "anova" });
+      updateAnalysisConfig({ ...config, correction, contrastMode: "all_pairs", method: "anova" });
     } else if (correction === "games-howell") {
-      setConfig({ ...config, correction, contrastMode: "all_pairs", method: "welch_anova" });
+      updateAnalysisConfig({ ...config, correction, contrastMode: "all_pairs", method: "welch_anova" });
     } else if (correction === "dunnett") {
-      setConfig({ ...config, correction, contrastMode: "control", method: "recommended" });
+      updateAnalysisConfig({ ...config, correction, contrastMode: "control", method: "recommended" });
     } else {
-      setConfig({ ...config, correction });
+      updateAnalysisConfig({ ...config, correction });
     }
   }
 
@@ -780,22 +885,22 @@ export function Workbench() {
     if (!config) return;
     if (config.design === "one_way" && method === "recommended") {
       const correction = config.contrastMode === "control" ? "dunnett" : config.contrastMode === "all_pairs" ? "games-howell" : "holm";
-      setConfig({ ...config, method, correction });
+      updateAnalysisConfig({ ...config, method, correction });
     } else if (config.design === "one_way" && method === "anova") {
-      setConfig({ ...config, method, contrastMode: "all_pairs", correction: "tukey" });
+      updateAnalysisConfig({ ...config, method, contrastMode: "all_pairs", correction: "tukey" });
     } else if (config.design === "one_way" && method === "welch_anova") {
-      setConfig({ ...config, method, contrastMode: "all_pairs", correction: "games-howell" });
+      updateAnalysisConfig({ ...config, method, contrastMode: "all_pairs", correction: "games-howell" });
     } else if (config.design === "one_way" && method === "kruskal_wallis") {
-      setConfig({ ...config, method, contrastMode: "all_pairs", correction: "holm" });
+      updateAnalysisConfig({ ...config, method, contrastMode: "all_pairs", correction: "holm" });
     } else {
-      setConfig({ ...config, method });
+      updateAnalysisConfig({ ...config, method });
     }
   }
 
   function updateSelectedComparison(field: "numerator" | "denominator", value: string) {
     if (!config) return;
     const current = config.selectedComparisons?.[0] ?? { numerator: "", denominator: "" };
-    setConfig({ ...config, selectedComparisons: [{ ...current, [field]: value }] });
+    updateAnalysisConfig({ ...config, selectedComparisons: [{ ...current, [field]: value }] });
   }
 
   async function downloadExport() {
@@ -874,6 +979,10 @@ export function Workbench() {
     ...((experiment?.targetGenes.length ?? 0) > 1 ? [{ value: "heatmap" as const, label: locale === "zh-CN" ? "热图" : "Heatmap" }] : [])
   ];
   const selectedPalette = paletteGroups.flatMap((group) => group.options).find((item) => item.value === figurePalette);
+  const importControls = <>
+    <textarea aria-label={locale === "zh-CN" ? "Ct 数据" : "Ct data"} className="data-paste" value={paste} onChange={(event) => setPaste(event.target.value)} spellCheck={false} />
+    <div className="inline-actions"><button className="quiet-button" onClick={parsePaste}><FileSpreadsheet size={16} />{t.parse}</button><button className="quiet-button" onClick={() => fileRef.current?.click()}><Upload size={16} />CSV / XLSX</button><button className="primary-button" onClick={() => void analyzePastedData()} disabled={busy}><Play size={16} />{locale === "zh-CN" ? "分析并出图" : "Analyze & plot"}</button><input ref={fileRef} hidden type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></div>
+  </>;
 
   return (
     <main className="app-shell">
@@ -891,10 +1000,10 @@ export function Workbench() {
       <div className="core-workspace">
         <section className="work-area">
           <div className="page-heading">
-            <h1>{t.title}</h1>
+            <h1 className="sr-only">{t.title}</h1>
+            <div className="workspace-title">{step === 0 ? (locale === "zh-CN" ? "Ct 数据" : "Ct data") : (locale === "zh-CN" ? "数据与图" : "Data + figure")}</div>
             <div className="heading-actions">
               <label className="example-picker">
-                <Sparkles size={15} />
                 <span className="sr-only">{t.examples}</span>
                 <select aria-label={t.examples} value="" onChange={(event) => loadExample(event.target.value as ExampleId)}>
                   <option value="" disabled>{t.chooseExample}</option>
@@ -902,7 +1011,6 @@ export function Workbench() {
                 </select>
               </label>
               <button className="quiet-button" onClick={saveProject} disabled={!experiment}><Save size={15} />{t.save}</button>
-              <button className="primary-button one-click" onClick={() => void runAnalysis()} disabled={busy || !localCalculation}><Play size={15} />{locale === "zh-CN" ? "一键分析出图" : "Analyze & plot"}</button>
             </div>
           </div>
 
@@ -910,9 +1018,9 @@ export function Workbench() {
             {t.steps.map((label, index) => <button key={label} className={step === index ? "active" : ""} onClick={() => setStep(index)}>{label}</button>)}
           </nav>
 
-          {step === 0 && <div className="core-stack">
+          {step === 0 && <div className="core-stack data-workspace">
             <section className="panel setup-panel">
-              <h2>{locale === "zh-CN" ? "实验信息" : "Experiment"}</h2>
+              <h2>{locale === "zh-CN" ? "实验设置" : "Experiment"}</h2>
               {!experiment ? <EmptyState text={t.empty} onDemo={loadDemo} label={t.demo} /> : <div className="setup-fields">
                 <div className="field-grid setup-primary">
                   <label><span>{t.project}</span><input value={experiment.name} onChange={(event) => setExperiment({ ...experiment, name: event.target.value })} /></label>
@@ -926,14 +1034,19 @@ export function Workbench() {
             </section>
 
             <section className="panel data-panel">
-              <h2>{locale === "zh-CN" ? "Ct 数据" : "Ct data"}</h2>
-              <textarea aria-label={locale === "zh-CN" ? "Ct 数据" : "Ct data"} className="data-paste" value={paste} onChange={(event) => setPaste(event.target.value)} spellCheck={false} />
-              <div className="inline-actions"><button className="quiet-button" onClick={parsePaste}><FileSpreadsheet size={16} />{t.parse}</button><button className="quiet-button" onClick={() => fileRef.current?.click()}><Upload size={16} />CSV / XLSX</button><button className="primary-button" onClick={() => void analyzePastedData()} disabled={busy}><Play size={16} />{locale === "zh-CN" ? "分析并出图" : "Analyze & plot"}</button><input ref={fileRef} hidden type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></div>
-              {experiment && <><CtSummaryTable experiment={experiment} locale={locale} onReferenceChange={renameReferenceGene} onTargetChange={renameTargetGene} onGroupChange={renameGroup} /><details className="well-details"><summary>{locale === "zh-CN" ? "逐孔 Ct 明细与 QC" : "Well-level Ct details and QC"}</summary><DataTable wells={experiment.wells} onToggle={updateWell} locale={locale} /></details></>}
+              <div className="panel-heading-row">
+                <h2>{locale === "zh-CN" ? "原始 Ct" : "Raw Ct"}</h2>
+                {experiment && <div className="data-heading-actions">
+                  <button className="quiet-button" onClick={() => setShowRawEditor((value) => !value)}><Pencil size={14} />{locale === "zh-CN" ? "编辑原始 Ct" : "Edit raw Ct"}</button>
+                  <button className="primary-button" data-dirty={hasUnappliedEdits ? "true" : "false"} onClick={() => void recomputeEditedData()} disabled={busy || !localCalculation}><RefreshCw size={14} />{locale === "zh-CN" ? "重新计算" : "Recompute"}</button>
+                </div>}
+              </div>
+              {experiment ? <details className="reimport-details"><summary>{locale === "zh-CN" ? "重新导入 Ct" : "Re-import Ct"}</summary>{importControls}</details> : importControls}
+              {experiment && <><CtSummaryTable experiment={experiment} locale={locale} onReferenceChange={renameReferenceGene} onTargetChange={renameTargetGene} onGroupChange={renameGroup} />{showRawEditor && <EditableCtTable experiment={experiment} locale={locale} onWellChange={updateRawWell} />}<details className="well-details"><summary>QC</summary><DataTable wells={experiment.wells} onToggle={updateWell} locale={locale} /></details></>}
             </section>
           </div>}
 
-          {step === 1 && <div className="core-stack">
+          {step === 1 && <div className="core-stack analysis-workspace" role="region" aria-label={locale === "zh-CN" ? "数据与图" : "Data and figure"}>
             <section className="panel statistics-panel">
               <div className="compact-title"><h2>{t.statsTitle}</h2>{config && <strong>{selectedMethodLabel(config, locale)}</strong>}</div>
               {config ? <div className="recommendation compact-recommendation">
@@ -943,27 +1056,28 @@ export function Workbench() {
               </div> : <EmptyState text={t.empty} onDemo={loadDemo} label={t.demo} />}
             </section>
 
-            {result && <section className="panel results-panel">
-              <h2>{t.resultTitle}</h2>
-              {contrast ? <div className="metric-strip"><Metric label={contrast.target_gene ?? "Fold change"} value={`${scientific(contrast.fold_change)}×`} accent /><Metric label={`${percentLabel(config?.confidenceLevel)} CI`} value={`${scientific(contrast.fold_change_ci_low)}–${scientific(contrast.fold_change_ci_high)}`} /><Metric label="adjusted p" value={scientific(contrast.p_adjusted_family ?? contrast.p_adjusted)} /><Metric label="biological n" value={biologicalNLabel(result)} /></div> : <div className="metric-strip"><Metric label={locale === "zh-CN" ? "统计方法" : "Method"} value={fittedMethod ?? "—"} accent /><Metric label={locale === "zh-CN" ? "比较数量" : "Comparisons"} value={String(contrasts.length)} /><Metric label={locale === "zh-CN" ? "最小校正 p" : "Minimum adjusted p"} value={scientific(adjustedPValues.length ? Math.min(...adjustedPValues) : undefined)} /><Metric label="biological n" value={biologicalNLabel(result)} /></div>}
-              <details className="analysis-details"><summary>{locale === "zh-CN" ? "完整统计结果" : "Full statistics"}</summary>{diagnostic && <div className="diagnostic-note"><strong>{locale === "zh-CN" ? "模型诊断" : "Model diagnostics"}</strong><span>Shapiro p {scientific(diagnostic.residual_normality_p)} · Fligner p {scientific(diagnostic.variance_homogeneity_p)} · {locale === "zh-CN" ? "离群残差" : "outliers"} {diagnostic.standardized_residual_outlier_count ?? 0}</span></div>}{omnibusRows.length > 0 && <OmnibusTable rows={omnibusRows} locale={locale} />}<ResultsTable samples={result.calculation.samples} /></details>
+            {result && <section ref={analysisCanvasRef} tabIndex={-1} className="panel results-panel" aria-label={locale === "zh-CN" ? "计算后的数据值" : "Computed values"}>
+              <div className="panel-heading-row"><div><h2>{t.resultTitle}</h2><span className="result-method">2^-ΔΔCt · {fittedMethod ?? "—"}</span></div><button className="quiet-button" onClick={openDataEditor}><Pencil size={14} />{locale === "zh-CN" ? "编辑数据" : "Edit data"}</button></div>
+              {contrast ? <div className="metric-strip"><Metric label={contrast.target_gene ?? "Fold change"} value={`${scientific(contrast.fold_change)}×`} accent /><Metric label={`${percentLabel(config?.confidenceLevel)} CI`} value={`${scientific(contrast.fold_change_ci_low)}–${scientific(contrast.fold_change_ci_high)}`} /><Metric label={locale === "zh-CN" ? "校正 p" : "adjusted p"} value={scientific(contrast.p_adjusted_family ?? contrast.p_adjusted)} /><Metric label={locale === "zh-CN" ? "生物学 n" : "biological n"} value={<div className="metric-n-list">{biologicalNEntries(result).map(({ group, n }) => <span className="metric-n-row" key={group}><b>{group}</b><small>n={n}</small></span>)}</div>} /></div> : <div className="metric-strip"><Metric label={locale === "zh-CN" ? "统计方法" : "Method"} value={<span className="metric-method-value">{fittedMethod ?? "—"}</span>} accent /><Metric label={locale === "zh-CN" ? "比较数量" : "Comparisons"} value={String(contrasts.length)} /><Metric label={locale === "zh-CN" ? "最小校正 p" : "Minimum adjusted p"} value={scientific(adjustedPValues.length ? Math.min(...adjustedPValues) : undefined)} /><Metric label={locale === "zh-CN" ? "生物学 n" : "biological n"} value={<div className="metric-n-list">{biologicalNEntries(result).map(({ group, n }) => <span className="metric-n-row" key={group}><b>{group}</b><small>n={n}</small></span>)}</div>} /></div>}
+              <ExpressionSummaryTable groups={result.calculation.groups} experiment={experiment} locale={locale} />
+              <details className="analysis-details"><summary>{locale === "zh-CN" ? "统计明细" : "Statistics"}</summary>{diagnostic && <div className="diagnostic-note"><strong>{locale === "zh-CN" ? "模型诊断" : "Model diagnostics"}</strong><span>Shapiro p {scientific(diagnostic.residual_normality_p)} · Fligner p {scientific(diagnostic.variance_homogeneity_p)} · {locale === "zh-CN" ? "离群残差" : "outliers"} {diagnostic.standardized_residual_outlier_count ?? 0}</span></div>}{omnibusRows.length > 0 && <OmnibusTable rows={omnibusRows} locale={locale} />}<ResultsTable samples={result.calculation.samples} /></details>
             </section>}
 
-            <section className="panel figure-panel">
-            <h2>{t.figureTitle}</h2>
-            <div className="figure-studio">
+            <section className={`panel figure-panel ${result ? "" : "figure-panel-empty"}`}>
+            <div className="panel-heading-row"><h2>{t.figureTitle}</h2>{result && <button className="quiet-button" onClick={openDataEditor}><Pencil size={14} />{locale === "zh-CN" ? "编辑数据" : "Edit data"}</button>}</div>
+              <div className="figure-studio">
               <div className="figure-stage">
-                {svgUrl ? <div className={`figure-canvas ${previewing ? "updating" : ""}`}><Image src={svgUrl} width={900} height={620} unoptimized alt={locale === "zh-CN" ? "R 生成的相对表达量图" : "R-generated relative expression plot"} />{previewing && <span className="preview-status">{locale === "zh-CN" ? "更新中…" : "Updating…"}</span>}</div> : <EmptyState text={locale === "zh-CN" ? "输入 Ct 后分析出图。" : "Enter Ct values and run analysis."} onDemo={() => runAnalysis()} label={t.run} />}
+                {svgUrl ? <div className={`figure-canvas ${previewing ? "updating" : ""}`}><Image src={svgUrl} width={900} height={620} unoptimized alt={locale === "zh-CN" ? "R 生成的相对表达量图" : "R-generated relative expression plot"} />{previewing && <span className="preview-status">{locale === "zh-CN" ? "更新中…" : "Updating…"}</span>}</div> : <EmptyState text={locale === "zh-CN" ? "输入 Ct 后分析出图。" : "Enter Ct values and run analysis."} onDemo={() => void runAnalysis()} label={t.run} />}
                 {previewError && <p className="preview-error">{previewError}</p>}
               </div>
-              <aside className="figure-inspector">
+              <aside className="figure-inspector" role="region" aria-label={locale === "zh-CN" ? "图形设置" : "Figure settings"}>
                 <div className="inspector-heading"><Palette size={16} /><strong>{locale === "zh-CN" ? "图形设置" : "Figure settings"}</strong></div>
                 <fieldset><legend>{locale === "zh-CN" ? "图形类型" : "Plot type"}</legend><div className="plot-tabs">{availableFigureTypes.map((item) => <button key={item.value} className={figureType === item.value ? "selected" : ""} onClick={() => setFigureType(item.value)}>{item.label}</button>)}</div></fieldset>
               <details className="palette-details"><summary><span>{locale === "zh-CN" ? "选择与编辑配色" : "Choose and edit palette"}</span><PaletteSwatch colors={customColors} gradient={figurePalette.startsWith("gradient-")} whiteCenter={Boolean(selectedPalette?.whiteCenter)} /></summary><div className="palette-editor"><div className="palette-categories">{paletteGroups.map((group) => <button key={group.value} className={paletteCategory === group.value ? "selected" : ""} onClick={() => setPaletteCategory(group.value)}>{group.label[locale]}</button>)}</div><div className="palette-grid" role="group" aria-label={locale === "zh-CN" ? "配色方案" : "Palette presets"}>{paletteGroups.find((group) => group.value === paletteCategory)?.options.map((item) => <button key={item.id ?? item.value} aria-label={item.label} className={figurePalette === item.value && (item.value !== "custom" || customColors.join(",") === item.colors.join(",")) ? "selected" : ""} onClick={() => { setFigurePalette(item.value); setCustomColors(item.colors); }}><PaletteSwatch colors={item.colors} gradient={item.value.startsWith("gradient-")} whiteCenter={Boolean(item.whiteCenter)} /><span className="palette-name">{item.label}</span></button>)}</div><div className="custom-colors">{customColors.map((color, index) => <label key={`${index}-${color}`}><span>{locale === "zh-CN" ? `颜色 ${index + 1}` : `Color ${index + 1}`}</span><input aria-label={locale === "zh-CN" ? `颜色 ${index + 1}` : `Color ${index + 1}`} type="color" value={color} onChange={(event) => setCustomColors((colors) => colors.map((item, itemIndex) => itemIndex === index ? event.target.value.toUpperCase() : item))} /></label>)}</div><div className="custom-color-actions"><button disabled={customColors.length >= 8} onClick={() => setCustomColors((colors) => [...colors, "#7A8FA6"])}>{locale === "zh-CN" ? "+ 添加颜色" : "+ Add color"}</button><button disabled={customColors.length <= 2} onClick={() => setCustomColors((colors) => colors.slice(0, -1))}>{locale === "zh-CN" ? "− 减少颜色" : "− Remove"}</button></div></div></details>
                 <fieldset><legend>{locale === "zh-CN" ? "样本点形状" : "Point shape"}</legend><div className="shape-options">{pointShapes.map((item) => <button key={item.value} aria-label={item.label[locale]} aria-pressed={pointShape === item.value} className={pointShape === item.value ? "selected" : ""} onClick={() => setPointShape(item.value)}><i className={`shape-${item.value}`} /><span>{item.label[locale]}</span></button>)}</div></fieldset>
                 <div className="inspector-grid"><label><span>{locale === "zh-CN" ? "显著性标注" : "P-value label"}</span><select value={pLabelMode} onChange={(event) => setPLabelMode(event.target.value as PLabelMode)}><option value="stars">* / ** / ***</option><option value="stars-exact">Stars + exact p</option><option value="exact">Exact adjusted p</option><option value="none">None</option></select></label><label><span>{locale === "zh-CN" ? "样本点大小" : "Point size"}</span><select value={pointSize} onChange={(event) => setPointSize(Number(event.target.value) as PointSize)}><option value="1.1">{locale === "zh-CN" ? "小" : "Small"}</option><option value="1.5">{locale === "zh-CN" ? "标准" : "Standard"}</option><option value="1.8">{locale === "zh-CN" ? "大" : "Large"}</option><option value="2.2">{locale === "zh-CN" ? "特大" : "Extra large"}</option></select></label><label><span>{locale === "zh-CN" ? "投稿宽度" : "Width"}</span><select value={figureWidth} onChange={(event) => setFigureWidth(Number(event.target.value) as FigureWidth)}><option value="60">60 mm</option><option value="75">75 mm</option><option value="90">90 mm</option><option value="120">120 mm</option><option value="150">150 mm</option><option value="180">180 mm</option></select></label><label><span>{locale === "zh-CN" ? "投稿高度" : "Height"}</span><select value={figureHeight} onChange={(event) => setFigureHeight(Number(event.target.value) as 60 | 70 | 75 | 90 | 105 | 120)}><option value="60">60 mm</option><option value="70">70 mm</option><option value="75">75 mm</option><option value="90">90 mm</option><option value="105">105 mm</option><option value="120">120 mm</option></select></label><label className="check-control"><input type="checkbox" checked={showPoints} onChange={(event) => setShowPoints(event.target.checked)} /><span>{locale === "zh-CN" ? "显示独立样本点" : "Show individual points"}</span></label></div>
                 <div className="figure-download"><label><span>{locale === "zh-CN" ? "文件格式" : "File format"}</span><select value={figureFormat} onChange={(event) => setFigureFormat(event.target.value as FigureFormat)}><option value="svg">SVG</option><option value="pdf">PDF</option><option value="png">PNG</option><option value="tiff">TIFF</option></select></label><label><span>{locale === "zh-CN" ? "下载分辨率" : "Download DPI"}</span><select value={figureDpi} disabled={figureFormat === "svg" || figureFormat === "pdf"} onChange={(event) => setFigureDpi(Number(event.target.value) as 300 | 600)}><option value="300">300 dpi</option><option value="600">600 dpi</option></select></label><button className="primary-button" onClick={() => void downloadFigure()} disabled={!result || busy}><Download size={16} />{locale === "zh-CN" ? "下载图形" : "Download figure"}</button></div>
-                <details className="package-details"><summary>{locale === "zh-CN" ? "完整科研包（可选）" : "Research package (optional)"}</summary><button className="quiet-button" onClick={downloadExport} disabled={!job || busy}><Download size={15} />{t.export}</button></details>
+                <details className="package-details"><summary>{locale === "zh-CN" ? "科研包" : "Research package"}</summary><button className="quiet-button" onClick={downloadExport} disabled={!job || busy}><Download size={15} />{t.export}</button></details>
               </aside>
             </div>
             </section>
@@ -1009,7 +1123,7 @@ function ExperimentDesignTable({
   const customReference = !referenceGeneOptions.some((option) => option.value === experiment.referenceGene);
   return <div className="design-editor">
     <div className="reference-row">
-      <span className="role-tag">Reference</span>
+      <span className="role-tag">{locale === "zh-CN" ? "内参" : "Reference"}</span>
       <label><span>{locale === "zh-CN" ? "内参基因" : "Reference gene"}</span><select aria-label={locale === "zh-CN" ? "内参基因" : "Reference gene"} value={customReference ? "__custom__" : experiment.referenceGene} onChange={(event) => onReferenceChange(event.target.value === "__custom__" ? "ReferenceGene" : event.target.value)}>
         {referenceGeneOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         <option value="__custom__">{locale === "zh-CN" ? "自定义…" : "Custom…"}</option>
@@ -1059,14 +1173,52 @@ function CtSummaryTable({
     <th>{locale === "zh-CN" ? "重复数" : "Replicates"}</th>
     <th>{locale === "zh-CN" ? "分组" : "Group"}</th>
   </tr></thead><tbody>{rows.map((row) => <tr key={`${row.groupId}-${row.gene}`}>
-    <td><div className="compact-gene"><EditableText value={row.gene} ariaLabel={`${locale === "zh-CN" ? "基因名" : "Gene"} ${row.gene} ${row.groupId}`} onCommit={(next) => row.reference ? onReferenceChange(next) : onTargetChange(row.gene, next)} />{row.reference && <span>Reference</span>}</div></td>
+    <td><div className="compact-gene"><EditableText value={row.gene} ariaLabel={`${locale === "zh-CN" ? "基因名" : "Gene"} ${row.gene} ${row.groupId}`} onCommit={(next) => row.reference ? onReferenceChange(next) : onTargetChange(row.gene, next)} />{row.reference && <span>{locale === "zh-CN" ? "内参" : "Reference"}</span>}</div></td>
     <td><output>{row.replicates}</output></td>
     <td><EditableText value={row.groupId} ariaLabel={`${locale === "zh-CN" ? "分组" : "Group"} ${row.groupId} ${row.gene}`} onCommit={(next) => onGroupChange(row.groupId, next)} /></td>
   </tr>)}</tbody></table></div>;
 }
 
-function Metric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
-  return <div className={accent ? "metric accent" : "metric"}><span>{label}</span><strong>{value}</strong></div>;
+function Metric({ label, value, accent = false }: { label: string; value: ReactNode; accent?: boolean }) {
+  return <div className={accent ? "metric accent" : "metric"}><span>{label}</span>{typeof value === "string" ? <strong>{value}</strong> : <div className="metric-value">{value}</div>}</div>;
+}
+
+function EditableCtTable({
+  experiment,
+  locale,
+  onWellChange
+}: {
+  experiment: ExperimentInput;
+  locale: Locale;
+  onWellChange: (wellId: string, patch: Partial<Pick<CtWell, "ct" | "groupId">>) => void;
+}) {
+  const pageSize = 24;
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(experiment.wells.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const start = currentPage * pageSize;
+  const wells = experiment.wells.slice(start, start + pageSize);
+  return <div className="raw-ct-editor">
+    <table aria-label={locale === "zh-CN" ? "原始 Ct 数据" : "Raw Ct data"}>
+      <thead><tr>
+        <th>{locale === "zh-CN" ? "基因名" : "Gene"}</th>
+        <th>{locale === "zh-CN" ? "重复" : "Replicate"}</th>
+        <th>{locale === "zh-CN" ? "分组" : "Group"}</th>
+        <th>{locale === "zh-CN" ? "Ct 值" : "Ct value"}</th>
+      </tr></thead>
+      <tbody>{wells.map((well) => <tr key={well.wellId} className={well.status === "excluded" ? "excluded" : undefined}>
+        <td><em>{well.gene}</em></td>
+        <td>{well.biologicalReplicateId}/{well.technicalReplicateId}</td>
+        <td><select aria-label={`${locale === "zh-CN" ? "分组" : "Group"} ${well.wellId}`} value={well.groupId} onChange={(event) => onWellChange(well.wellId, { groupId: event.target.value })}>{experiment.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></td>
+        <td><input aria-label={`${locale === "zh-CN" ? "Ct 值" : "Ct value"} ${well.wellId}`} type="number" step="0.01" min="0" value={well.ct ?? ""} onChange={(event) => {
+          const value = event.target.value.trim();
+          const parsed = Number(value);
+          onWellChange(well.wellId, { ct: value === "" ? null : Number.isFinite(parsed) ? parsed : null });
+        }} /></td>
+      </tr>)}</tbody>
+    </table>
+    <div className="raw-ct-footer"><span>{start + 1}–{start + wells.length} / {experiment.wells.length}</span><div className="raw-ct-pagination"><button className="icon-button" aria-label={locale === "zh-CN" ? "上一页" : "Previous page"} onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={currentPage === 0}>‹</button><span>{currentPage + 1}/{pageCount}</span><button className="icon-button" aria-label={locale === "zh-CN" ? "下一页" : "Next page"} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))} disabled={currentPage === pageCount - 1}>›</button></div></div>
+  </div>;
 }
 
 function DataTable({ wells, onToggle, locale }: { wells: CtWell[]; onToggle: (id: string) => void; locale: Locale }) {
@@ -1075,6 +1227,23 @@ function DataTable({ wells, onToggle, locale }: { wells: CtWell[]; onToggle: (id
 
 function ResultsTable({ samples }: { samples: SampleExpression[] }) {
   return <div className="table-wrap"><table><thead><tr><th>Sample</th><th>Group</th><th>Gene</th><th>target Ct</th><th>reference Ct</th><th>ΔCt</th><th>ΔΔCt</th><th>2^-ΔΔCt</th></tr></thead><tbody>{samples.map((sample) => <tr key={`${sample.sampleId}-${sample.targetGene}`}><td>{sample.sampleId}</td><td>{sample.groupId}</td><td>{sample.targetGene}</td><td>{scientific(sample.targetMeanCt)}</td><td>{scientific(sample.referenceMeanCt)}</td><td>{scientific(sample.deltaCt)}</td><td>{scientific(sample.deltaDeltaCt)}</td><td><b>{scientific(sample.foldChange)}</b></td></tr>)}</tbody></table></div>;
+}
+
+function ExpressionSummaryTable({ groups, experiment, locale }: { groups: AnalysisResult["groups"]; experiment: ExperimentInput | null; locale: Locale }) {
+  return <div className="expression-summary">
+    <div className="expression-summary-heading"><h3>{locale === "zh-CN" ? "相对表达量" : "Relative expression"}</h3><span>2^-ΔΔCt</span></div>
+    <table aria-label={locale === "zh-CN" ? "相对表达量" : "Relative expression"}><thead><tr>
+      <th>{locale === "zh-CN" ? "基因" : "Gene"}</th>
+      <th>{locale === "zh-CN" ? "分组" : "Group"}</th>
+      <th>{locale === "zh-CN" ? "表达倍数" : "Fold change"}</th>
+      <th>n</th>
+    </tr></thead><tbody>{groups.map((group) => <tr key={`${group.targetGene}-${group.groupId}`}>
+      <td><em>{group.targetGene}</em></td>
+      <td>{experiment?.groups.find((item) => item.id === group.groupId)?.name ?? group.groupId}</td>
+      <td><strong>{scientific(group.geometricMeanFoldChange)}×</strong></td>
+      <td>{group.biologicalN}</td>
+    </tr>)}</tbody></table>
+  </div>;
 }
 
 function OmnibusTable({ rows, locale }: { rows: Array<Record<string, unknown>>; locale: Locale }) {

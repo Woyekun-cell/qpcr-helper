@@ -254,19 +254,22 @@ build_expression_plot <- function(
     summary_data <- group_interval(samples, summary_columns, confidence_level)
     time_plot <- ggplot2::ggplot(samples, ggplot2::aes(x = time, y = foldChange, colour = groupId)) +
         ggplot2::geom_line(ggplot2::aes(group = subjectId), linewidth = 0.3, alpha = 0.25) +
-        ggplot2::geom_point(shape = resolve_point_shape(point_shape), size = point_size, stroke = 0.28, fill = "white", alpha = 0.85) +
+        ggplot2::geom_point(ggplot2::aes(fill = groupId), shape = resolve_point_shape(point_shape), size = point_size, stroke = 0.28, alpha = 0.85) +
         ggplot2::geom_line(
           data = summary_data,
-          ggplot2::aes(x = time, y = center, group = groupId),
+          ggplot2::aes(x = time, y = center, group = groupId, colour = groupId),
+          inherit.aes = FALSE,
           linewidth = 0.8
         ) +
         ggplot2::geom_errorbar(
           data = summary_data,
-          ggplot2::aes(x = time, ymin = ci_low, ymax = ci_high),
+          ggplot2::aes(x = time, ymin = ci_low, ymax = ci_high, colour = groupId),
+          inherit.aes = FALSE,
           width = 0.08,
           linewidth = 0.3
         ) +
         ggplot2::scale_colour_manual(values = colors) +
+        ggplot2::scale_fill_manual(values = colors) +
         ggplot2::scale_y_log10() +
         ggplot2::labs(x = "Time", y = "Relative expression", title = title) +
         theme_qpcr_nature() +
@@ -279,22 +282,14 @@ build_expression_plot <- function(
   summary_columns <- if (multiple_genes) c("targetGene", "groupId") else "groupId"
   summary_data <- group_interval(samples, summary_columns, confidence_level)
   group_labels <- stats::setNames(levels(samples$groupId), levels(samples$groupId))
-  visible_series <- paste(samples$targetGene, samples$groupId, sep = " · ")
-  series_levels <- unlist(lapply(levels(samples$targetGene), function(gene) {
-    candidates <- paste(gene, levels(samples$groupId), sep = " · ")
-    candidates[candidates %in% visible_series]
-  }), use.names = FALSE)
-  samples$seriesId <- if (multiple_genes) factor(visible_series, levels = series_levels) else samples$groupId
-  summary_data$seriesId <- if (multiple_genes) factor(
-    paste(summary_data$targetGene, summary_data$groupId, sep = " · "),
-    levels = levels(samples$seriesId)
-  ) else summary_data$groupId
-  fill_colors <- if (plot_type == "bar") resolve_palette(palette_name, levels(samples$seriesId), custom_colors) else colors
+  # A group owns one color across every target-gene facet.  Series-level colors
+  # make the same control/treated groups appear inconsistent in multi-gene plots.
+  fill_colors <- colors
   plot <- ggplot2::ggplot(samples, ggplot2::aes(x = groupId, y = foldChange))
   if (plot_type == "bar") {
     plot <- plot + ggplot2::geom_col(
       data = summary_data,
-      ggplot2::aes(x = groupId, y = center, fill = seriesId),
+      ggplot2::aes(x = groupId, y = center, fill = groupId),
       width = 0.62,
       colour = "#262824",
       linewidth = 0.28,
@@ -315,7 +310,7 @@ build_expression_plot <- function(
     )
   }
   if (show_points) {
-    point_fill_mapping <- if (plot_type == "bar") ggplot2::aes(fill = seriesId) else ggplot2::aes(fill = groupId)
+    point_fill_mapping <- ggplot2::aes(fill = groupId)
     plot <- plot + ggplot2::geom_point(
       mapping = point_fill_mapping,
       position = ggplot2::position_jitter(width = 0.052, height = 0, seed = 104),

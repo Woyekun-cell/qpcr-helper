@@ -1,6 +1,10 @@
 # qPCR Helper
 
-输入逐孔 Ct/Cq，完成透明 QC、2^-ΔΔCt、设计驱动统计与 R-only 科研图。
+一个面向科研人员的 qPCR 分析与投稿级绘图工具：输入逐孔 Ct/Cq，自动完成技术重复汇总、2^-ΔΔCt 表达量计算、设计驱动统计推荐和 R 绘图。支持柱状图叠加样本点、散点图、小提琴+箱线图、配对/时间曲线与 ComplexHeatmap 热图，并可直接导出 SVG、PDF、PNG、TIFF。
+
+在线演示：<https://qpcr-helper-web-production.up.railway.app>
+
+项目范围刻意保持清晰：技术重复先做 QC 和汇总，统计 n 只计算生物学重复；结果保留逐步计算链、QC 记录和可复现参数。内置独立两组、配对、单因素、两因素、重复测量和多基因示例，便于快速了解工作方式。
 
 ## 目录
 
@@ -15,12 +19,13 @@
 
 ## 本地运行
 
-要求 Node 24、pnpm 11、R 4.4+。先复制 `.env.example` 为 `.env.local`，设置同一 `ANALYSIS_R_SHARED_SECRET`。
+要求 Node 24、pnpm 11、R 4.4+。先将 `.env.example` 复制为 `apps/web/.env.local`，设置同一 `ANALYSIS_R_SHARED_SECRET`；开发环境需同时运行 Web 与 R 服务。
 
 ```bash
 pnpm install
 Rscript services/analysis-r/install.R
-cd services/analysis-r && Rscript run.R
+ANALYSIS_R_SHARED_SECRET=qpcr-helper-local-dev PORT=8787 HOST=127.0.0.1 Rscript services/analysis-r/run.R
+# 另开终端
 pnpm dev
 ```
 

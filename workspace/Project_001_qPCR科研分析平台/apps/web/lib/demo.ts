@@ -1,4 +1,5 @@
 import type { CtWell, ExperimentInput } from "@qpcr/contracts";
+import { createClientId } from "./id";
 
 type Locale = ExperimentInput["locale"];
 
@@ -118,7 +119,7 @@ function experiment(
   const { units, ...metadata } = input;
   return {
     ...metadata,
-    projectId: crypto.randomUUID(),
+    projectId: createClientId(),
     locale,
     wells: units.flatMap((unit) => wellsForUnit(unit, metadata.referenceGene)).map((well) => ({
       ...well,

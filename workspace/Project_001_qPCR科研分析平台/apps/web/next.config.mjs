@@ -3,6 +3,9 @@ const development = process.env.NODE_ENV !== "production";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  // The desktop preview opens 127.0.0.1 while Next initializes on localhost.
+  // Allow the equivalent loopback origin so dev assets and React hydration load.
+  allowedDevOrigins: ["127.0.0.1"],
   transpilePackages: ["@qpcr/contracts"],
   experimental: {
     optimizePackageImports: ["lucide-react"]
