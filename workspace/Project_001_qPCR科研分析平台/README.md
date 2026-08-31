@@ -1,25 +1,29 @@
 # qPCR Helper
 
-一个面向科研人员的 qPCR 分析与投稿级绘图工具：输入逐孔 Ct/Cq，自动完成技术重复汇总、2^-ΔΔCt 表达量计算、设计驱动统计推荐和 R 绘图。支持柱状图叠加样本点、散点图、小提琴+箱线图、配对/时间曲线与 ComplexHeatmap 热图，并可直接导出 SVG、PDF、PNG、TIFF。
+把 Ct 值整理成结果和图的 qPCR 小工具。
 
-在线演示：<https://qpcr-helper-web-production.up.railway.app>
+将逐孔 Ct/Cq 粘贴进表格，或上传 CSV/XLSX，选择内参和分组后点击分析。qPCR Helper 会计算 ΔCt、ΔΔCt 和 `2^-ΔΔCt` 表达量，并根据实验设计给出统计方法选项，再生成可以继续调整和下载的科研图。
 
-项目范围刻意保持清晰：技术重复先做 QC 和汇总，统计 n 只计算生物学重复；结果保留逐步计算链、QC 记录和可复现参数。内置独立两组、配对、单因素、两因素、重复测量和多基因示例，便于快速了解工作方式。
+![qPCR Helper 多基因柱状图示例](.audit-ui/05-multi-group-color.png)
 
-## 目录
+## 可以做什么
 
-- `apps/web`：Next.js 界面与 API。
-- `packages/contracts`：共享数据契约、校验与 TypeScript 计算核心。
-- `services/analysis-r`：R 统计、绘图与导出。
-- `supabase`：数据库迁移、RLS 与 Storage 策略。
+- 柱状图叠加样本点、散点图、小提琴+箱线图、配对图和时间曲线
+- 多基因表达热图（ComplexHeatmap）
+- Welch t-test、配对 t-test、ANOVA + Tukey、Dunnett、Holm、BH-FDR 等选择
+- 点大小、点形状、分组颜色、画布尺寸和显著性标注可即时调整
+- SVG、PDF、PNG、TIFF 单图下载，不必先下载整套科研包
+- 内置独立两组、配对、单因素、两因素、重复测量和多基因示例
 
-## 科研边界
+技术重复先做 QC 和汇总，统计 `n` 只计算生物学重复。该工具用于科研分析，不用于临床诊断；正式投稿前仍需结合扩增效率、内参稳定性和实验设计复核结果。
 
-仅用于研究，不用于临床诊断。使用者仍需验证扩增效率、内参稳定性和实验设计。
+## 在线使用
+
+<https://qpcr-helper-web-production.up.railway.app>
 
 ## 本地运行
 
-要求 Node 24、pnpm 11、R 4.4+。先将 `.env.example` 复制为 `apps/web/.env.local`，设置同一 `ANALYSIS_R_SHARED_SECRET`；开发环境需同时运行 Web 与 R 服务。
+要求 Node 24、pnpm 11、R 4.4+。
 
 ```bash
 pnpm install
@@ -29,22 +33,28 @@ ANALYSIS_R_SHARED_SECRET=qpcr-helper-local-dev PORT=8787 HOST=127.0.0.1 Rscript 
 pnpm dev
 ```
 
-访问 `http://localhost:3000`，内置独立、配对、单因素、两因素、时间序列、多基因六组合成示例。验证：`pnpm test && pnpm typecheck && pnpm lint && pnpm check:contrast && pnpm check:responsive && pnpm build`；双服务启动后运行 `pnpm e2e:local`。
+访问 `http://localhost:3000`。运行检查：
 
-## 对话式远程分析
+```bash
+pnpm test
+pnpm typecheck
+pnpm lint
+Rscript services/analysis-r/tests/test_figures.R
+```
 
-AI 先把用户上传或粘贴的数据整理为 Helper 标准 JSON；统计与绘图仍由生产站点完成。连接器支持文件或标准输入：
+## 目录
+
+- `apps/web`：Next.js 界面与 API
+- `packages/contracts`：共享数据契约和计算核心
+- `services/analysis-r`：统计、绘图和导出
+- `supabase`：数据库迁移、RLS 与 Storage 策略
+
+## 对话式分析
+
+如果先用聊天工具整理原始数据，可以把标准 JSON 交给 Helper：
 
 ```bash
 pnpm analyze:remote -- --input request.json --output result --formats svg,pdf,png --package
-pnpm analyze:remote -- --input - --output result --formats svg < request.json
 ```
 
-输出 `analysis-result.json`、指定格式图和可选科研包。游客能力令牌不会写入磁盘。生产站点：<https://qpcr-helper-web-production.up.railway.app>。
-
-## 部署
-
-- Railway：Web 与 R 为独立服务，通过私网地址和共享密钥通信；公开域名只暴露 Web。
-- Supabase：执行迁移，确认私有 bucket、RLS、生产及本地 Auth callback。
-
-无云端凭据时可本地运行，不自动创建线上资源。
+输出结果表和图形；游客令牌不会写入磁盘。
