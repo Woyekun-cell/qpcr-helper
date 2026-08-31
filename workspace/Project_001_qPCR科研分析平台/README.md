@@ -2,6 +2,8 @@
 
 把 Ct 值整理成结果和图的 qPCR 小工具。
 
+**Overview (English)** — qPCR Helper turns well-level Ct/Cq values into `2^-ΔΔCt` expression results and publication-ready figures. Choose the reference gene, experimental design and group labels, then review the recommended statistics before exporting the figure you need.
+
 将逐孔 Ct/Cq 粘贴进表格，或上传 CSV/XLSX，选择内参和分组后点击分析。qPCR Helper 会计算 ΔCt、ΔΔCt 和 `2^-ΔΔCt` 表达量，并根据实验设计给出统计方法选项，再生成可以继续调整和下载的科研图。
 
 ![qPCR Helper 精准图形预览](.audit-ui/10-module-figure.png)
@@ -17,7 +19,9 @@
 - SVG、PDF、PNG、TIFF 单图下载，不必先下载整套科研包
 - 内置独立两组、配对、单因素、两因素、重复测量和多基因示例
 
-技术重复先做 QC 和汇总，统计 `n` 只计算生物学重复。该工具用于科研分析，不用于临床诊断；正式投稿前仍需结合扩增效率、内参稳定性和实验设计复核结果。
+中文：技术重复先做 QC 和汇总，统计 `n` 只计算生物学重复。该工具用于科研分析，不用于临床诊断；正式投稿前仍需结合扩增效率、内参稳定性和实验设计复核结果。
+
+English: Technical replicates are checked and aggregated first; statistical `n` counts biological replicates only. This tool is for research analysis, not clinical diagnosis. Before submission, review amplification efficiency, reference-gene stability and the experimental design.
 
 ## 在线使用
 
