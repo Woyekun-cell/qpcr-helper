@@ -4,7 +4,7 @@
 
 检查 qPCR Helper 的“分析与作图”结果页：长统计方法、长分组名、结果卡片、配色选择器、窄屏重排。目标是让研究者输入 Ct 后能快速读懂结果，并稳定生成图形。
 
-当前审计证据：`.audit-ui/01-start.png`（空态）、`.audit-ui/02-result-before.png`（修订前）、`.audit-ui/03-result-after.png`、`.audit-ui/04-final.png`（最终修订）、`.audit-ui/05-multi-group-color.png`（多基因分组统一配色）。
+当前审计证据：`.audit-ui/01-start.png`（空态）、`.audit-ui/02-result-before.png`（修订前）、`.audit-ui/03-result-after.png`、`.audit-ui/04-final.png`（最终修订）、`.audit-ui/05-multi-group-color.png`（多基因分组统一配色）、`.audit-ui/06-live-after-tight.png`（实时结果页）、`.audit-ui/07-module-data.png` 至 `.audit-ui/11-module-export.png`（五个模块截图）。
 
 ## 已发现与修复
 
@@ -13,12 +13,14 @@
 3. 期刊风格、莫兰迪、马卡龙、通用安全四类预设统一提供 7 个稳定色阶；第四个及以后颜色按同一套色系顺序映射，不再回退到随机色。
 4. R 端与前端预设顺序同步；自定义预设也扩展为 7 个色阶，仍可继续添加到 8 个。
 5. 柱状图、散点图和小提琴/箱线图均按 `groupId` 映射颜色；多基因分面只改变基因面板，不改变 control/treated 等分组颜色。`.audit-ui/05-multi-group-color.png` 已在重启 R 服务后复核，三块基因面板中的同一分组保持同色。
+6. 图形预览原先被固定 `max-height: 580px` 和 `min-height: 500px` 撑高，SVG 内部因此出现上下留白。现在按固有宽高比显示，画布随预览内容收缩；`.audit-ui/10-module-figure.png` 为修复后的精准裁剪图。
 
 ## 结果
 
 - 信息层级保持“结果指标 → 相对表达量表 → 统计明细”，没有新增无关说明。
 - 配色选择器继续折叠，打开后按分类选择；选中预设立即更新编辑色板。
 - 宽屏结果与图形并排，窄屏单列；截图与 DOM 快照均未见布局溢出或错误提示。
+- 数据、统计、结果、图形、下载五个模块均有中英文说明，集中在 `docs/module-guide.md`，截图均来自内置演示数据。
 
 ## 限制
 
