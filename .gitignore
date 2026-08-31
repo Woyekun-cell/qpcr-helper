@@ -1,9 +1,8 @@
-.DS_Store
-.worktrees/
 node_modules/
 .next/
 coverage/
 dist/
+*.tsbuildinfo
 *.log
 .env
 .env.local
@@ -13,5 +12,5 @@ Rplots.pdf
 .r-lib/
 renv/library/
 renv/staging/
-workspace/Project_001_qPCR科研分析平台/apps/web/.guest-data/
-workspace/Project_001_qPCR科研分析平台/services/analysis-r/artifacts/
+apps/web/.guest-data/
+services/analysis-r/artifacts/
