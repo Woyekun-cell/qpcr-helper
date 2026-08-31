@@ -4,7 +4,9 @@
 
 将逐孔 Ct/Cq 粘贴进表格，或上传 CSV/XLSX，选择内参和分组后点击分析。qPCR Helper 会计算 ΔCt、ΔΔCt 和 `2^-ΔΔCt` 表达量，并根据实验设计给出统计方法选项，再生成可以继续调整和下载的科研图。
 
-![qPCR Helper 多基因柱状图示例](.audit-ui/05-multi-group-color.png)
+![qPCR Helper 精准图形预览](.audit-ui/10-module-figure.png)
+
+从数据录入到下载的界面说明（中英双语）：[`docs/module-guide.md`](docs/module-guide.md)。
 
 ## 可以做什么
 

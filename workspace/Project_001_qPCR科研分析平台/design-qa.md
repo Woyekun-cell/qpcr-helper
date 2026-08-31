@@ -4,7 +4,7 @@
 
 - 视觉参考：第 2 张“数据与图并排”稿，暖象牙背景、墨黑文字、苔绿主色、珊瑚强调、薄边框、小圆角。
 - 参考图：`/Users/woyekun/.codex/generated_images/01a02de9-f47c-7d52-b375-b17f96a66c34/exec-55e8aa50-c934-4ed8-ab91-771163278463.png`（1487 × 1058）。
-- 实现截图：`.audit-ui/04-final.png`（1280 × 720，浏览器当前视口；长分组名修订后）；`.audit-ui/05-multi-group-color.png`（多基因柱状图，验证组别色彩跨面板稳定）。
+- 实现截图：`.audit-ui/04-final.png`（1280 × 720，浏览器当前视口；长分组名修订后）；`.audit-ui/05-multi-group-color.png`（多基因柱状图，验证组别色彩跨面板稳定）；`.audit-ui/06-live-after-tight.png`（修复留白后的实时结果页）；`.audit-ui/07-module-data.png` 至 `.audit-ui/11-module-export.png`（模块级证据）。
 - 对照图：`/tmp/qpcr-helper-option2-comparison.png`（两张图按列缩放到统一高度，用于结构检查，不作为像素级相似度结论）。
 
 ## 验收状态
@@ -20,13 +20,15 @@
 - P0：无。
 - P1：无。输入分析后的自动跳转和结果渲染已验证；全量 metadata round-trip 已覆盖测试。
 - P2：已修复。窄屏三列挤压、无结果大面积空白、统计设置改变后旧 CI 仍显示等问题均已处理。
+- P2：已修复。图形预览曾被固定高度约束，造成 SVG 上下 letterbox 留白；现在使用固有比例和自适应画布，图形截图已单独裁剪。
 - P3：已处理。结果区加入键盘焦点；自动滚动尊重 `prefers-reduced-motion`。
 - 剩余差异：实现截图展示的是用户要求的“分析后结果态”，参考稿展示的是“原始 Ct + 图形态”；两者信息状态不同但布局方向一致。截图视口也不同，因此不做像素级相似度判定。
 
 ## 验证
 
-- 测试：web 57 passed、3 skipped；contracts 18 passed；远端统计测试 6 passed；R figure tests passed。
+- 测试：web 58 passed、3 skipped；contracts 18 passed；远端统计测试 6 passed；R figure tests passed。
 - 构建：Next.js production build passed；TypeScript、ESLint、对比度、响应式检查和 `git diff --check` passed。
 - E2E：`foldChange ≈ 8`、游客令牌隔离、错误令牌拒绝、原始请求不暴露均 passed。
+- 说明：`docs/module-guide.md` 提供数据录入、统计选择、结果、图形工作台和下载的中英文图文说明。
 
 final result: passed

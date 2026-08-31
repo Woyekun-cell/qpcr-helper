@@ -7,8 +7,17 @@ import { createDemoExperiment, createExampleExperiment } from "@/lib/demo";
 import type { PlatformAnalysisResult } from "@/lib/result-types";
 import { guestProjects } from "@/lib/guest-projects";
 import { parseCtText } from "@/lib/import";
+import { readFileSync } from "node:fs";
 
 describe("qPCR workbench", () => {
+  it("keeps figure previews at their intrinsic ratio instead of a letterboxed fixed canvas", () => {
+    const css = readFileSync("app/globals.css", "utf8");
+    expect(css).toMatch(/\.figure-canvas img \{[^}]*height:\s*auto;[^}]*max-height:\s*none;/s);
+    expect(css).toMatch(/\.analysis-workspace \.figure-canvas \{ min-height:\s*0; \}/);
+    expect(css).toMatch(/\.analysis-workspace \.figure-inspector \{ padding: 14px; max-height: 445px; overflow: auto; \}/);
+    expect(css).not.toMatch(/\.analysis-workspace \.figure-canvas \{ min-height:\s*300px; \}/);
+  });
+
   it("loads one of six examples and supports bilingual qPCR Helper branding", async () => {
     const user = userEvent.setup();
     render(<Workbench />);
